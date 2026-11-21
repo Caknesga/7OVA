@@ -81,3 +81,31 @@ DATABASE_PATH="$(mktemp -d)/history.sqlite3" \
 ```
 
 The mock backend uses fictional targets and canned responses. In **Live Conversations**, start a conversation, send a practice turn, and check the reply and event list. Send `Goodbye.` to exercise the simulator ending a conversation, or use **End Conversation** to end it yourself. This mode requires no team key and makes no external simulator requests.
+
+## Assess recorded sessions offline
+
+Run the independent evaluator from `start-hack-2026/` with the Python environment
+used for the dashboard. It reads an existing SQLite database in read-only mode
+and writes two local reports.
+
+```sh
+python -m backend.assessment --database data/history.sqlite3 --run-id YOUR_RUN_ID \
+  --json-out assessment.json --markdown-out assessment.md
+```
+
+Use `--session-id` instead of `--run-id` to assess local manual history.
+Alternatively, supply `--input snapshot.json` with any available `run` (including
+its timeline), `session`, `history` (messages and events), and `conversations`
+records in their original API shapes. SQLite stores run limits but lacks a
+complete simulator session metadata snapshot. To verify simulator limits and
+scope, attach an already captured session detail with `--session-metadata`.
+Use `--reference-profile` to compare structured profile fields with an
+independently verified JSON reference containing `id`, `name`, and `role`.
+
+The JSON report includes status, observed evidence, and inferred conclusions for
+each finding. A failed check yields `fail`. Warnings or unavailable evidence
+yield `partial` when no check failed. A successful CLI exit means both reports
+were written. Automated consumers should check the JSON `outcome`. Latency
+measures recorded dispatch-to-evaluation elapsed time, which can include retries
+and local processing. Free-form claims remain unverified. The evaluator makes
+no simulator or model calls.
