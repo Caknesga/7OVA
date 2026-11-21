@@ -1,3 +1,4 @@
+import json
 import time
 from threading import Event
 from uuid import uuid4
@@ -10,6 +11,7 @@ from backend.qa import PHRASES
 from backend.qa_openai import Settings, provider
 from backend.qa_simulator import MockSimulator
 from tests.mock_simulator import MOCK_KEY, MockSimulator as TargetTransport
+from tests.test_qa_openai import _response
 
 
 def key():
@@ -73,6 +75,64 @@ def practice_settings(**changes):
                         "input_rate": 1, "output_rate": 1} | changes))
 
 
+def test_openai_model_with_mock_simulator_uses_only_synthetic_state(tmp_path):
+    outputs = {
+        "Plan": {"action": "send_message", "channel": "email"},
+        "Generate": {"phrase": "hello"},
+        "Evaluate": {"observation": "question"},
+    }
+    calls = []
+
+    def complete_choice(request):
+        assert request.url == "https://api.openai.com/v1/responses"
+        body = json.loads(request.content)
+        calls.append(body)
+        return httpx.Response(200, json=_response(json.dumps(outputs[body["text"]["format"]["name"]])))
+
+    transport = httpx.MockTransport(complete_choice)
+    with TestClient(create_app("", tmp_path / "db", httpx.MockTransport(offline),
+                               qa_options={"settings": practice_settings(),
+                                           "provider_factory": lambda s, mock: provider(s, mock, transport=transport)}
+                               )) as client:
+        config = client.get("/api/qa/config").json()
+        assert config["openai_available"] and not config["real_available"]
+        assert start(client, mode="mock_openai", target="robin").status_code == 422
+        assert start(client, mode="mock_openai", sid="s_official").status_code == 422
+        response = start(client, mode="mock_openai", limit=1)
+        assert response.status_code == 202
+        run = completed(client, response.json()["id"])
+        assert run["status"] == "completed", run
+        assert run["session_id"].startswith("qa_mock_")
+        assert run["touches_used"] == 1
+        assert run["model"] == "fixture"
+        assert run["usage"]["estimated_usd"] > 0
+        assert [call["text"]["format"]["name"] for call in calls] == ["Plan", "Generate", "Evaluate"]
+        assert json.loads(calls[-1]["input"]) == {"has_reply": True, "has_question_mark": True, "ended": False}
+
+
+def test_qa_substitutes_unused_approved_phrases_for_repeated_choices(tmp_path):
+    def repeated_choice(phase, context, schema):
+        choices = {
+            "plan": {"action": "send_message", "channel": "email"},
+            "generate": {"phrase": "hello"},
+            "evaluate": {"observation": "question"},
+        }
+        return schema.model_validate(choices[phase]), {
+            "input_tokens": 1, "cached_tokens": 0, "output_tokens": 1,
+        }
+
+    with TestClient(create_app("", tmp_path / "db", httpx.MockTransport(offline),
+                               qa_options={"settings": practice_settings(),
+                                           "provider_factory": lambda *_: repeated_choice})) as client:
+        response = start(client, mode="mock_openai", limit=3)
+        run = completed(client, response.json()["id"])
+        assert run["status"] == "completed"
+        assert run["touches_used"] == 3
+        sent = [item["detail"]["text"] for item in run["timeline"] if item["state"] == "COMMUNICATE"]
+        assert sent == list(PHRASES.values())
+        assert sum(item["detail"].get("repeated_phrase_skipped", False) for item in run["timeline"]) == 2
+
+
 def test_real_adapter_confirmation_practice_guard_and_official_routes(tmp_path):
     upstream = TargetTransport()
     with TestClient(create_app(MOCK_KEY, tmp_path / "db", httpx.MockTransport(upstream),
@@ -86,6 +146,14 @@ def test_real_adapter_confirmation_practice_guard_and_official_routes(tmp_path):
         r = start(client, mode="practice", target="robin", sid=sid, confirm=True)
         run = completed(client, r.json()["id"])
         assert run["status"] == "completed", run
+        replies = {item["detail"]["action"]: item["detail"]["replies"] for item in run["timeline"]
+                   if item["state"] == "EVALUATE"}
+        assert replies == {
+            "start_conversation": ["Hello, how can I help?"],
+            "continue_conversation": ["Thanks for the practice turn."],
+            "end_conversation": [],
+            "send_message": ["Thanks for the practice message."],
+        }
         contacts = [req for req in upstream.requests if req.method == "POST"]
         assert [req.url.path.rsplit("/", 1)[-1] for req in contacts] == [
             "sessions", "conversations", "turns", "end", "messages",

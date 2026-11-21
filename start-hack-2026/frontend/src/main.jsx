@@ -110,6 +110,13 @@ function App() {
     }
   }
 
+  function selectTab(next) {
+    setTab(next)
+    if (tab === 'agent' && next !== 'agent' && session && !busy) {
+      void run('Loading session', () => inspect(session.session_id, session))
+    }
+  }
+
   useEffect(() => { void run('Connecting', refresh) }, [])
 
   async function createSession() {
@@ -183,7 +190,7 @@ function App() {
           <p role="alert" className="error">{error.message}</p>}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {tab !== 'agent' && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ['Remaining touches', remaining === null ? '—' : remaining, session ? 'Current session' : 'Select a session'],
           ['Sent messages', history.messages.length, 'Recorded locally'],
@@ -192,7 +199,7 @@ function App() {
         ].map(([name, value, caption]) => <div className="panel metric" key={name}>
           <h2>{name}</h2><strong>{value}</strong><p>{caption}</p>
         </div>)}
-      </div>
+      </div>}
 
       <div className="workspace">
         <aside className="rail">
@@ -226,10 +233,10 @@ function App() {
               <p>{tab === 'agent' ? 'Run and review simulator QA.' :
                 session ? session.session_id + ' · ' + label(session.status) : 'Select or create a practice session.'}</p></div>
             <div className="tabs" aria-label="Activity view">
-              <button type="button" aria-pressed={tab === 'conversation'} onClick={() => setTab('conversation')}>Conversation</button>
-              <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Events</button>
-              <button type="button" aria-pressed={tab === 'live'} onClick={() => setTab('live')}>Live Conversations</button>
-              <button type="button" aria-pressed={tab === 'agent'} onClick={() => setTab('agent')}>AI Agent</button>
+              <button type="button" aria-pressed={tab === 'conversation'} onClick={() => selectTab('conversation')}>Conversation</button>
+              <button type="button" aria-pressed={tab === 'events'} onClick={() => selectTab('events')}>Events</button>
+              <button type="button" aria-pressed={tab === 'live'} onClick={() => selectTab('live')}>Live Conversations</button>
+              <button type="button" aria-pressed={tab === 'agent'} onClick={() => selectTab('agent')}>AI Agent</button>
             </div>
           </div>
 

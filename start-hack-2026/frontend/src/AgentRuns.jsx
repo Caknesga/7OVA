@@ -1,68 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { api, post } from './api.js'
+import { RunActivity } from './RunActivity.jsx'
 
 const mockTarget = 'qa_persona'
+const modeLabels = { mock: 'Mock', mock_openai: 'OpenAI + Mock', practice: 'Official practice' }
 const pollInterval = 1000
 const usd = (amount) => Number.isFinite(amount)
   ? amount.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 6 })
   : '—'
 const title = (value) => String(value).replaceAll('_', ' ').replace(/^./, (first) => first.toUpperCase())
-
-function displayTime(value) {
-  const date = new Date(value)
-  return value && !Number.isNaN(date.getTime()) ? date.toLocaleString() : ''
-}
-
-function RecordValue({ value }) {
-  if (Array.isArray(value)) {
-    return value.length ? <ul className="qa-record-list">{value.map((item, index) =>
-      <li key={index}><RecordValue value={item} /></li>,
-    )}</ul> : <span className="muted">None</span>
-  }
-  if (value !== null && typeof value === 'object') {
-    const fields = Object.entries(value)
-    return fields.length ? <dl className="qa-record">{fields.map(([key, entry]) =>
-      <div key={key}><dt>{title(key)}</dt><dd><RecordValue value={entry} /></dd></div>,
-    )}</dl> : null
-  }
-  return <span>{value == null ? '—' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)}</span>
-}
-
-function RunActivity({ run }) {
-  if (!run) return null
-  const usage = run.usage || {}
-  const profile = run.profile && typeof run.profile === 'object' && Object.keys(run.profile).length > 0
-
-  return <>
-    <dl className="live-facts" aria-label="Run summary">
-      <div><dt>Status</dt><dd>{title(run.status)} · {run.state || 'START'}</dd></div>
-      <div><dt>Session</dt><dd className="session-id">{run.session_id || 'Pending'}</dd></div>
-      <div><dt>Touches used</dt><dd>{run.touches_used ?? 0} / {run.max_touches}</dd></div>
-      <div><dt>Model</dt><dd>{run.model || 'Mock fixtures'}</dd></div>
-      <div><dt>Input tokens</dt><dd>{usage.input_tokens ?? 0}</dd></div>
-      <div><dt>Cached input tokens</dt><dd>{usage.cached_tokens ?? 0}</dd></div>
-      <div><dt>Output tokens</dt><dd>{usage.output_tokens ?? 0}</dd></div>
-      <div><dt>Estimated run cost</dt><dd>{usd(usage.estimated_usd ?? 0)}</dd></div>
-    </dl>
-    {run.stop_reason && <p className="qa-note" role="status">{run.stop_reason}</p>}
-    {profile && <details className="qa-section">
-      <summary>Simulator profile</summary>
-      <RecordValue value={run.profile} />
-    </details>}
-    <section className="qa-section" aria-label="Activity timeline">
-      <h3>Activity timeline</h3>
-      <ol className="qa-timeline">
-        {(run.timeline || []).map((entry, index) => <li key={entry.id ?? index}>
-          <div className="qa-step"><strong>{entry.state}</strong>
-            {displayTime(entry.created_at) && <time dateTime={entry.created_at}>{displayTime(entry.created_at)}</time>}
-          </div>
-          <RecordValue value={entry.detail} />
-        </li>)}
-      </ol>
-      {!run.timeline?.length && <p className="muted">Waiting for recorded activity.</p>}
-    </section>
-  </>
-}
 
 function savedStart() {
   try {
@@ -101,14 +47,17 @@ export function AgentRuns({ targets, sessions }) {
   const pendingStop = useRef(null)
 
   const practice = mode === 'practice'
+  const paid = mode !== 'mock'
+  const modelAvailable = practice ? config?.real_available : config?.openai_available
   const activeSessions = sessions.filter((session) => session.status === 'active')
   const run = snapshot?.id === selected ? snapshot : runs.find((item) => item.id === selected)
   const stopping = run?.status === 'running' && (run.stop_requested || requestedStop === run.id)
-  const canStart = config && !busy && (!practice || (
-    config.real_available && config.remaining_usd > 0 && confirmed
-    && targets.some((item) => item.id === target)
+  const canStart = config && !busy
+    && (!paid || (modelAvailable && config.remaining_usd > 0 && confirmed))
+    && (!practice || (
+      targets.some((item) => item.id === target)
     && activeSessions.some((item) => item.session_id === sessionId)
-  ))
+    ))
 
   useEffect(() => {
     const controller = new AbortController()
@@ -226,6 +175,7 @@ export function AgentRuns({ targets, sessions }) {
             setConfirmed(false)
           }}>
             <option value="mock">Mock</option>
+            <option value="mock_openai" disabled={!config?.openai_available}>OpenAI + Mock</option>
             <option value="practice" disabled={!config?.real_available}>Official practice</option>
           </select></label>
           <label>Maximum touches<input type="number" min="1" max="10" step="1" required value={touches}
@@ -245,15 +195,16 @@ export function AgentRuns({ targets, sessions }) {
             </> : <option value="">New isolated mock session</option>}
           </select></label>
         </div>
-        <p className="qa-note">{practice ? config?.model : 'Mock fixtures'} · Approved QA phrases</p>
-        {config && !config.real_available && <p className="muted">
-          {config.configuration_error || 'Configure the backend to enable official practice.'}
+        <p className="qa-note">{paid ? config?.model : 'Mock fixtures'} · Approved QA phrases</p>
+        {config?.configuration_error && <p className="muted">
+          {config.configuration_error}
         </p>}
-        {practice && config.remaining_usd <= 0 && <p className="qa-warning">The local estimated budget is exhausted.</p>}
+        {paid && config?.remaining_usd <= 0 && <p className="qa-warning">The local estimated budget is exhausted.</p>}
         {practice && !activeSessions.length && <p className="qa-note">Create a practice session using New session before starting.</p>}
-        {practice && <label className="qa-consent">
+        {paid && <label className="qa-consent">
           <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-          Allow this run to use official simulator touches and paid OpenAI requests.
+          {practice ? 'Allow official simulator touches and paid OpenAI requests.'
+            : 'Allow paid OpenAI requests for this fictional mock session.'}
         </label>}
         <button className="primary" disabled={!canStart}>{busy === 'start' ? 'Starting…' : 'Start run'}</button>
       </fieldset>
@@ -278,7 +229,7 @@ export function AgentRuns({ targets, sessions }) {
       }}>
         {!runs.length && <option value="">No recorded runs</option>}
         {runs.map((item) => <option key={item.id} value={item.id}>
-          {title(item.mode)} · {item.target} · {title(item.status)} · {item.id}
+          {modeLabels[item.mode] || title(item.mode)} · {item.target} · {title(item.status)} · {item.id}
         </option>)}
       </select></label>
       <div className="actions">
@@ -288,6 +239,6 @@ export function AgentRuns({ targets, sessions }) {
         </button>
       </div>
     </div>
-    <RunActivity run={run} />
+    {run && <RunActivity key={run.id} run={run} formatCost={usd} />}
   </section>
 }

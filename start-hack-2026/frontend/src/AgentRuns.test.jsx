@@ -20,10 +20,17 @@ const running = {
 const complete = {
   ...running, state: 'STOP', status: 'completed', touches_used: 1, stop_reason: 'QA sequence complete.',
   usage: { input_tokens: 15, cached_tokens: 5, output_tokens: 3, estimated_usd: 0 },
-  timeline: [{
-    id: 1, state: 'COMMUNICATE', created_at: '2026-11-21T14:00:00Z',
-    detail: { text: 'Hello from the QA test.', reply: 'Mock reply.' },
-  }],
+  timeline: [
+    { state: 'START', detail: { mode: 'mock' } },
+    { state: 'PLAN', detail: { allowed: ['send_message', 'stop'] } },
+    { state: 'PLAN', detail: { decision: 'send_message', channel: 'email' } },
+    { state: 'COMMUNICATE', detail: { action: 'send_message', text: 'Hello from the QA test.' } },
+    { state: 'COMMUNICATE', detail: { action: 'send_message', retry: true, http_status: 503 } },
+    { state: 'EVALUATE', detail: { action: 'send_message', observation: 'reply', replies: ['Mock reply.'], remaining_touches: 0 } },
+    { state: 'MEMORY', detail: { action: 'send_message', classification: 'acknowledgement' } },
+    { state: 'CONTINUE', detail: { last_action: 'send_message' } },
+    { state: 'STOP', detail: { status: 'completed', reason: 'QA sequence complete.' } },
+  ],
 }
 
 function json(body, status = 200) {
@@ -59,8 +66,23 @@ it('starts an isolated mock run and polls its recorded transcript without simula
   expect(JSON.parse(options.body)).toEqual({
     mode: 'mock', target: 'qa_persona', session_id: null, max_touches: 2, confirm_practice: false,
   })
-  const timeline = await screen.findByRole('region', { name: 'Activity timeline' })
-  expect(await within(timeline).findByText('Mock reply.', {}, { timeout: 2000 })).toBeTruthy()
+  const flow = await screen.findByRole('region', { name: 'Agent data flow' })
+  const evaluate = await within(flow).findByRole('button', { name: 'Evaluate', description: '1 reply' }, { timeout: 2500 })
+  expect(screen.getByText('Run touches left').nextElementSibling.textContent).toBe('0')
+  expect(within(flow).getAllByRole('button').map((button) => button.querySelector('strong').textContent))
+    .toEqual(['Setup', 'Plan action', 'Simulator', 'Evaluate', 'Finish'])
+  expect(evaluate.getAttribute('aria-expanded')).toBe('false')
+  expect(screen.getByText('Technical details').parentElement.open).toBe(false)
+  fireEvent.click(evaluate)
+  expect(evaluate.getAttribute('aria-expanded')).toBe('true')
+  expect(within(flow).getByText('Mock reply.')).toBeTruthy()
+  expect(within(flow).getByText('0 run touches left')).toBeTruthy()
+  expect(within(flow).getByText('Reply classified as acknowledgement')).toBeTruthy()
+  const simulator = within(flow).getByRole('button', { name: 'Simulator', description: '1 action · 1 retry' })
+  fireEvent.click(simulator)
+  expect(evaluate.getAttribute('aria-expanded')).toBe('false')
+  expect(within(flow).getByText('Hello from the QA test.')).toBeTruthy()
+  expect(within(flow).getByText('HTTP 503')).toBeTruthy()
   expect(screen.getByText('QA sequence complete.')).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Stop run' }).disabled).toBe(true)
 })
@@ -91,11 +113,37 @@ it('requires an existing active session, a target and explicit consent for offic
   fireEvent.click(consent)
   click('Start run')
   await screen.findByText('QA sequence complete.')
+  const flow = screen.getByRole('region', { name: 'Agent data flow' })
+  const evaluate = within(flow).getByRole('button', { name: 'Evaluate' })
+  expect(evaluate.getAttribute('aria-expanded')).toBe('true')
+  expect(within(flow).getByText('Mock reply.')).toBeTruthy()
   const [, options] = fetchMock.mock.calls.find(([, request]) => request?.method === 'POST')
   expect(JSON.parse(options.body)).toEqual({
     mode: 'practice', target: 'robin', session_id: 's_active', max_touches: 3, confirm_practice: true,
   })
   expect(screen.getByText(/Estimated spending reached the .* warning threshold/)).toBeTruthy()
+})
+
+it('runs OpenAI against the fictional simulator without a practice session', async () => {
+  const modelRun = { ...complete, mode: 'mock_openai', model: config.model }
+  const fetchMock = vi.fn((path, options) => {
+    if (path === '/api/qa/config') return json({ ...config, openai_available: true, real_available: false })
+    if (path === '/api/qa/runs') return options?.method === 'POST' ? json(modelRun, 202) : json([])
+    if (path === '/api/qa/runs/r_demo') return json(modelRun)
+    throw new Error('Unexpected dashboard request ' + path)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<AgentRuns targets={[]} sessions={[]} />)
+  await waitFor(() => expect(screen.getByRole('option', { name: 'OpenAI + Mock' }).disabled).toBe(false))
+  fireEvent.change(screen.getByLabelText('Simulator mode'), { target: { value: 'mock_openai' } })
+  expect(screen.getByRole('button', { name: 'Start run' }).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('checkbox', { name: /Allow paid OpenAI requests/ }))
+  click('Start run')
+  await screen.findByText('QA sequence complete.')
+  const [, options] = fetchMock.mock.calls.find(([, request]) => request?.method === 'POST')
+  expect(JSON.parse(options.body)).toEqual({
+    mode: 'mock_openai', target: 'qa_persona', session_id: null, max_touches: 2, confirm_practice: false,
+  })
 })
 
 it('preserves the start key after a timeout and stops the selected run', async () => {

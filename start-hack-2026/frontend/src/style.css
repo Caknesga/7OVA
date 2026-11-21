@@ -110,13 +110,69 @@ button:not(:disabled):hover { filter: brightness(1.13); }
 .qa-spend dt, .qa-record dt, .qa-step time { color: var(--muted); font-size: .875rem; }
 .qa-spend dd { font-weight: 650; }
 .qa-warning { color: #f8d39b; font-size: .875rem; margin-bottom: .35rem; }
-.qa-timeline { display: grid; gap: .5rem; margin: 0; max-height: 32rem; overflow: auto; }
+.qa-run-summary { border-bottom: 0; gap: .75rem 1.75rem; }
+.qa-run-reason { flex: 1 1 12rem; }
+.qa-run-summary [data-status="completed"] { color: var(--accent); }
+.qa-run-summary [data-status="failed"] { color: #ffb6b7; }
+.qa-run-summary [data-status="stopped"] { color: #f8d39b; }
+.qa-flow-section { padding-block: 1.15rem; }
+.qa-flow-heading { margin-bottom: .85rem; }
+.qa-flow-heading h3 { margin-bottom: .15rem; }
+.qa-flow { container-type: inline-size; }
+.qa-flow-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .85rem; }
+.qa-flow-stages > li { position: relative; min-width: 0; }
+.qa-flow-stages > li:not(:last-child)::after {
+  content: ""; position: absolute; z-index: 1; top: 50%; right: -.61rem;
+  width: .38rem; height: .38rem; border-right: 1px solid #8396ad; border-top: 1px solid #8396ad;
+  transform: translateY(-50%) rotate(45deg); pointer-events: none;
+}
+.qa-flow-node {
+  display: flex; flex-direction: column; justify-content: center; gap: .25rem; width: 100%; height: 100%;
+  min-height: 78px; padding: .55rem .65rem; text-align: left; border: 1px solid #3c4e66;
+  border-radius: 9px; background: #192536; overflow-wrap: anywhere;
+}
+.qa-flow-node strong { font-size: .875rem; font-weight: 680; }
+.qa-flow-node span { color: #bdccdc; font-size: .8125rem; line-height: 1.3; }
+.qa-flow-node[data-recorded="false"] { border-style: dashed; background: #111b2a; opacity: .8; }
+.qa-flow-node[aria-current="step"] { border-color: var(--accent); }
+.qa-flow-node[aria-expanded="true"] { border-color: #68bea4; background: #1b3a36; }
+.qa-flow-node[aria-expanded="true"] strong { color: #bbf7df; }
+.qa-flow-loop {
+  max-width: 100%; margin: .5rem 20%; padding: .35rem .5rem 0;
+  border: 1px dashed #526680; border-top: 0; border-radius: 0 0 8px 8px;
+  text-align: center; color: var(--muted); font-size: .8125rem;
+}
+.qa-flow-loop span { color: var(--accent); margin-right: .25rem; }
+.qa-flow-empty { margin-top: .7rem; }
+.qa-flow-details {
+  margin-top: .8rem; padding: .8rem; background: #0e1623;
+  border: 1px solid var(--border); border-radius: 9px;
+}
+.qa-flow-details h4 { font-size: .9rem; font-weight: 680; }
+.qa-step-records { display: grid; gap: .55rem; margin-top: .55rem; max-height: 24rem; overflow: auto; }
+.qa-step-records li {
+  display: grid; gap: .2rem; border-left: 2px solid #3c4e66; padding: .25rem .65rem;
+  overflow-wrap: anywhere; font-size: .875rem;
+}
+.qa-step-records li > span { color: var(--muted); }
+.qa-step-records blockquote { color: #d5e3f3; white-space: pre-wrap; }
+.qa-technical-body, .qa-raw-log, .qa-timeline { margin-top: .65rem; }
+.qa-timeline { display: grid; gap: .5rem; max-height: 32rem; overflow: auto; }
 .qa-timeline > li { padding: .65rem .85rem; border: 1px solid var(--border); border-radius: 9px; }
 .qa-step { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem .8rem; }
 .qa-step strong { color: var(--accent); font-size: .875rem; }
 .qa-record { display: grid; gap: .35rem; margin: .35rem 0 0; }
 .qa-record dd { white-space: pre-wrap; overflow-wrap: anywhere; }
 .qa-record-list { display: grid; gap: .35rem; padding-left: 1.1rem; list-style-type: disc; }
+@container (max-width: 560px) {
+  .qa-flow-stages { grid-template-columns: minmax(0, 1fr); gap: .7rem; }
+  .qa-flow-node { min-height: 48px; flex-direction: row; justify-content: space-between; align-items: center; }
+  .qa-flow-node span { text-align: right; }
+  .qa-flow-stages > li:not(:last-child)::after {
+    top: auto; bottom: -.47rem; right: auto; left: 50%; transform: translateX(-50%) rotate(135deg);
+  }
+  .qa-flow-loop { margin-inline: 0; }
+}
 @media (max-width: 740px) {
   .workspace { grid-template-columns: 1fr; }
   .rail { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }

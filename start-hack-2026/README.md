@@ -44,16 +44,18 @@ The **Events** view summarizes observed replies, link opens, form submissions, a
 
 Open **AI Agent**, leave **Mock** selected, choose a touch limit of at least two, and click **Start run**. The offline demo uses a fictional test persona and a deterministic LLM fixture. You can watch it start a live chat, send a test turn, end the chat, send a separate message, and record the observed replies. It runs without keys or external API calls.
 
-To run against the official practice simulator, add the following settings to the existing `.env` and restart FastAPI:
+To try an OpenAI model with the fictional simulator, add these settings to `start-hack-2026/.env` and restart FastAPI:
 
-- `OPENAI_API_KEY` is your OpenAI project API key. Store it alongside your existing `TEAM_KEY` in the backend environment.
+- `OPENAI_API_KEY` is your OpenAI project API key. Keep it in the backend environment.
 - `OPENAI_MODEL` is a model your OpenAI project can use with the Responses API and strict structured outputs. [Structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs)
 - `OPENAI_INPUT_USD_PER_MTOK` and `OPENAI_OUTPUT_USD_PER_MTOK` are the standard prices in USD per million tokens for that model. Set `OPENAI_CACHED_USD_PER_MTOK` if applicable. Omitted cached pricing is estimated at the uncached input rate. [OpenAI pricing](https://openai.com/api/pricing/)
 - `OPENAI_BUDGET_USD`, `OPENAI_SOFT_LIMIT_USD`, and `OPENAI_MAX_RUN_COST_USD` default to $20, $15, and $2 respectively.
 
-Create a practice session with **New session**, then choose **Official practice**, the target, and that session in **AI Agent**. Set a touch cap, check the confirmation, and start the run. The dashboard displays the configured model, run history, observations, tokens, and estimated spending. These are local estimates for this database. Check your OpenAI project for billing, credits, and usage outside this dashboard.
+In **AI Agent**, select **OpenAI + Mock**, leave the fictional target selected, and set a touch cap of two. Check the confirmation to allow paid OpenAI requests and start the run. This mode needs no revel8 team key and uses the local simulator. The dashboard displays the configured model, run history, observations, tokens, and estimated spending. These are local estimates for this database. Check your OpenAI project for billing, credits, and usage outside this dashboard.
 
-The planner may select supported channels and test actions. The generator selects from the approved transparent QA phrases in `backend/qa.py`. OpenAI receives bounded state such as allowed actions and reply indicators. Real QA timelines record outgoing phrases and response metadata. The existing Conversation and Live Conversations views display full simulator transcripts. SQLite adds QA tables on startup.
+For official practice, create a practice session with **New session**, then choose **Official practice**, the target, and that session. Set a touch cap and confirm the run.
+
+The planner may select supported channels and test actions. The generator selects from the approved transparent QA phrases in `backend/qa.py`. OpenAI receives bounded state such as allowed actions and reply indicators. Official QA runs show saved simulator replies in **Evaluate** after the run ends. The existing Conversation and Live Conversations views display full simulator transcripts. SQLite adds QA tables on startup.
 
 Run one FastAPI worker. The worker serializes automated runs and reserves estimated cost before each paid request. Unknown charges after a timeout keep their local reserve. **Stop run** prevents further work at the next step boundary, and any in-flight request can finish. If a run stops with a conversation open, you can end it in the manual tab. Interrupted runs remain available in history.
 

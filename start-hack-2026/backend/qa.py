@@ -12,7 +12,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from .conversations import LIVE_CHANNELS, MAX_TURNS
+from .conversations import LIVE_CHANNELS, MAX_TURNS, list_for_session
 from .qa_openai import ProviderError, Settings, provider
 from .qa_simulator import MockSimulator
 
@@ -57,7 +57,7 @@ TOTALS = """SELECT COALESCE(SUM(input_tokens), 0) AS input_tokens,
 
 class RunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["mock", "practice"]
+    mode: Literal["mock", "mock_openai", "practice"]
     target: Id
     session_id: Id | None = None
     max_touches: int = Field(strict=True, ge=1, le=10)
@@ -107,6 +107,44 @@ def observation(receipt, mock):
     if mock:
         info["replies"] = replies
     return info
+
+
+def add_saved_replies(db, run):
+    """Attach only replies attributable to this run's recorded actions."""
+    results = [entry["detail"] for entry in run["timeline"] if entry["state"] == "EVALUATE"]
+    if not results:
+        return
+    sid = run["session_id"]
+    conversations = {chat["conversation_id"]: chat for chat in list_for_session(db, sid)
+                     if chat["to"] == run["target"]}
+    events = {}
+    by_message = {}
+    for row in db.execute("""
+        SELECT payload FROM history WHERE session = ? AND kind = 'event'
+            AND json_extract(payload, '$.type') = 'reply' ORDER BY rowid
+    """, (sid,)):
+        event = json.loads(row["payload"])
+        events[event["id"]] = event
+        if event.get("in_reply_to"):
+            by_message.setdefault(event["in_reply_to"], []).append(event)
+
+    for result in results:
+        action = result.get("action")
+        chat = conversations.get(result.get("conversation_id"))
+        text = None
+        if chat and action == "start_conversation":
+            text = chat["greeting"]
+        elif chat and action == "continue_conversation":
+            text = next((turn["persona_says"] for turn in chat["turns"]
+                         if turn["number"] == result.get("turns_used")), None)
+        linked = by_message.get(result.get("message_id"), []) if action == "send_message" else []
+        linked_ids = {event["id"] for event in linked}
+        linked = [*linked, *(events[eid] for eid in result.get("reply_event_ids", [])
+                             if eid in events and eid not in linked_ids)]
+        replies = [event.get("body") for event in linked]
+        if text is not None and text not in replies:
+            replies.append(text)
+        result["replies"] = [reply for reply in replies if isinstance(reply, str) and reply.strip()]
 
 
 def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_factory=provider,
@@ -162,6 +200,8 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
                 {"state": event["state"], "detail": json.loads(event["detail"]), "created_at": event["created_at"]}
                 for event in db.execute("SELECT * FROM qa_timeline WHERE run_id = ? ORDER BY seq", (row["id"],))
             ]
+            if data["mode"] == "practice" and data["status"] != "running" and data["session_id"]:
+                add_saved_replies(db, data)
         return data
 
     def get(db, run_id):
@@ -177,12 +217,12 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
             if get(db, run_id)["stop_requested"]:
                 raise StopRun("Stopped by user")
 
-    def infer(run_id, llm, mock, phase, context, schema):
+    def infer(run_id, llm, scripted, phase, context, schema):
         check_stop(run_id)
-        reserved = settings.reserve(phase, context, schema, mock=mock)
+        reserved = settings.reserve(phase, context, schema, mock=scripted)
         with connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            if not mock:
+            if not scripted:
                 total = db.execute(TOTALS).fetchone()["estimated_usd"]
                 spent = db.execute(TOTALS + " WHERE run_id = ?", (run_id,)).fetchone()["estimated_usd"]
                 if total + reserved > settings.budget_usd or total >= settings.budget_usd:
@@ -205,11 +245,11 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
             result, usage = llm(phase, context, schema)
         except ProviderError as error:
             if error.usage is not None:
-                settle(error.usage, settings.estimate(error.usage, mock=mock), False)
+                settle(error.usage, settings.estimate(error.usage, mock=scripted), False)
             elif not error.may_have_cost:
                 settle({}, 0, False)
             raise StopRun(str(error), "failed") from None
-        settle(usage, settings.estimate(usage, mock=mock), False)
+        settle(usage, settings.estimate(usage, mock=scripted), False)
         check_stop(run_id)
         return result
 
@@ -239,10 +279,11 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
                     check_stop(run_id)
 
     def run_workflow(run_id, request):
-        mock = request.mode == "mock"
-        simulator = simulator_factory() if mock else practice
+        mock_simulator = request.mode != "practice"
+        scripted = request.mode == "mock"
+        simulator = simulator_factory() if mock_simulator else practice
         check_stop(run_id)
-        transition(run_id, "RESEARCH", source="synthetic fixture" if mock else "revel8 practice scenario")
+        transition(run_id, "RESEARCH", source="synthetic fixture" if mock_simulator else "revel8 practice scenario")
         profile = simulator.research(request.target)
         session = simulator.session(request.session_id)
         if session["scenario_id"] != "practice" or session["status"] != "active":
@@ -255,18 +296,20 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
         with connect() as db:
             db.execute("UPDATE qa_runs SET session_id=?, profile=? WHERE id=?", (sid, json.dumps(profile), run_id))
             log_state(db, run_id, "RESEARCH", {"profile": profile, "remaining_touches": max(0, cap - baseline)})
-        llm = provider_factory(settings, mock)
+        llm = provider_factory(settings, scripted)
         cid, turns, touches = None, 0, baseline
         last_action, last_observation = "none", "none"
+        used_phrases = set()
         for step in range(1, 31):
+            available_phrases = [name for name in PHRASES if name not in used_phrases]
             if cid:
                 allowed = ["end_conversation"]
-                if turns < MAX_TURNS:
+                if turns < MAX_TURNS and available_phrases:
                     allowed.insert(0, "continue_conversation")
             else:
                 allowed = ["stop"]
                 if touches < cap:
-                    if messages:
+                    if messages and available_phrases:
                         allowed.append("send_message")
                     if live:
                         allowed.append("start_conversation")
@@ -276,7 +319,7 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
             context = {"allowed": allowed, "message_channels": messages, "live_channels": live,
                        "last_observation": last_observation, "last_action": last_action,
                        "has_conversation": bool(cid)}
-            plan = infer(run_id, llm, mock, "plan", context, Plan)
+            plan = infer(run_id, llm, scripted, "plan", context, Plan)
             action, channel = plan.action, plan.channel
             permitted_channels = messages if action == "send_message" else live if action == "start_conversation" else [None]
             if action not in allowed or channel not in permitted_channels:
@@ -287,8 +330,12 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
             phrase = None
             if action in {"send_message", "continue_conversation"}:
                 transition(run_id, "GENERATE", action=action)
-                choice = infer(run_id, llm, mock, "generate", {"action": action}, Generate)
-                phrase = PHRASES[choice.phrase]
+                choice = infer(run_id, llm, scripted, "generate", {"action": action}, Generate)
+                name = choice.phrase if choice.phrase in available_phrases else available_phrases[0]
+                if name != choice.phrase:
+                    transition(run_id, "GENERATE", action=action, repeated_phrase_skipped=True)
+                phrase = PHRASES[name]
+                used_phrases.add(name)
             receipt = communicate(run_id, simulator, action, sid, request.target, channel, phrase, cid, step, cap)
             if action in CONTACTS:
                 used = receipt.get("touches_used")
@@ -299,7 +346,10 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
                 cid, turns = receipt["conversation_id"], 0
             if action == "continue_conversation":
                 turns = receipt["turns_used"]
-            info = observation(receipt, mock)
+            info = observation(receipt, mock_simulator)
+            if not mock_simulator:
+                info["reply_event_ids"] = [event["id"] for event in (receipt.get("events") or [])
+                                           if event.get("type") == "reply" and event.get("id")]
             with connect() as db:
                 db.execute("UPDATE qa_runs SET touches_used=? WHERE id=?", (touches - baseline, run_id))
                 log_state(db, run_id, "EVALUATE", {
@@ -307,7 +357,7 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
                     "conversation_id": cid, "turns_used": turns, "remaining_touches": max(0, cap - touches),
                 })
             if info["observation"] == "reply":
-                assessment = infer(run_id, llm, mock, "evaluate",
+                assessment = infer(run_id, llm, scripted, "evaluate",
                                    {"has_question_mark": info["has_question_mark"], "has_reply": True,
                                     "ended": info["ended"]}, Evaluate)
                 info["classification"] = assessment.observation
@@ -339,7 +389,8 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
     def config():
         with connect() as db:
             total = db.execute(TOTALS).fetchone()["estimated_usd"]
-        return {"model": settings.model, "real_available": settings.available and practice.available,
+        return {"model": settings.model, "openai_available": settings.available,
+                "real_available": settings.available and practice.available,
                 "configuration_error": config_error or settings.configuration_error,
                 "budget_usd": settings.budget_usd, "soft_limit_usd": settings.soft_limit_usd,
                 "max_run_cost_usd": settings.max_run_cost_usd, "estimated_total_usd": total,
@@ -378,6 +429,8 @@ def create_qa(connect, practice, *, simulator_factory=MockSimulator, provider_fa
                     raise HTTPException(409, "A QA run is already active for this session.")
             elif request.session_id or request.target != "qa_persona":
                 raise HTTPException(422, "Mock runs use the synthetic QA persona and their own session.")
+            if request.mode == "mock_openai" and not settings.available:
+                raise HTTPException(503, config_error or settings.configuration_error)
             model = "mock-qa" if request.mode == "mock" else settings.model
             db.execute("""INSERT INTO qa_runs (id, request, mode, target, session_id, max_touches, model)
                 VALUES (?, ?, ?, ?, ?, ?, ?)""",

@@ -42,16 +42,17 @@ def assess(record):
 
     scenario = session.get("scenario_id")
     mode = run.get("mode")
-    if scenario not in (None, "practice") or mode not in (None, "practice", "mock"):
+    mock_simulator = mode in ("mock", "mock_openai")
+    if scenario not in (None, "practice") or (mode not in (None, "practice") and not mock_simulator):
         finding("safety", "fail", "Recorded scope is outside the approved modes.",
                 {"scenario_id": scenario, "mode": mode})
-    elif scenario == "practice" or mode == "mock":
+    elif scenario == "practice" or mock_simulator:
         finding("safety", "pass", "Recorded scope is practice or synthetic.",
                 {"scenario_id": scenario, "mode": mode})
     else:
         finding("safety", "unknown", "Session scope cannot be verified.")
 
-    if mode == "mock" and run.get("target") not in (None, "qa_persona"):
+    if mock_simulator and run.get("target") not in (None, "qa_persona"):
         finding("safety", "fail", "The mock run names a target outside the synthetic fixture.",
                 {"target": run["target"]})
     if mode == "practice" and type(run.get("confirm_practice")) is bool and not run["confirm_practice"]:
