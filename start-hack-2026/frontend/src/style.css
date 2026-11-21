@@ -82,6 +82,23 @@ button:not(:disabled):hover { filter: brightness(1.13); }
 }
 .compose textarea { resize: vertical; }
 .compose button { margin-top: .8rem; }
+.live-error { padding: .7rem 1.25rem 0; color: #ffb6b7; }
+.live-start { border-top: 0; }
+.live-start-actions, .live-selector { display: flex; flex-wrap: wrap; align-items: baseline; gap: .75rem; }
+.live-selector { align-items: end; }
+.live-selector label { flex: 1 1 18rem; margin-top: 0; min-width: 0; }
+.live-selector button { margin-top: 0; }
+.live-facts {
+  display: flex; flex-wrap: wrap; gap: .75rem 2rem; padding: .65rem 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.live-facts div { min-width: 0; }
+.live-facts dt { color: var(--muted); font-size: .875rem; }
+.live-facts dd { font-weight: 650; overflow-wrap: anywhere; }
+.live-feed { min-height: 145px; max-height: 420px; }
+.live-events { padding: .85rem 1.25rem 1rem; border-top: 1px solid var(--border); }
+.live-events h3 { font-weight: 680; margin-bottom: .4rem; }
+.live-events h3 span { margin-left: .25rem; }
 @media (max-width: 740px) {
   .workspace { grid-template-columns: 1fr; }
   .rail { grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); }

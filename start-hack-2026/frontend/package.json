@@ -2,7 +2,21 @@
   "name": "start-hack-2026",
   "private": true,
   "type": "module",
-  "scripts": {"dev": "vite --host 127.0.0.1 --strictPort", "build": "vite build"},
-  "dependencies": {"react": "^19.2.6", "react-dom": "^19.2.6"},
-  "devDependencies": {"vite": "^8.0.13", "tailwindcss": "^4.2.1", "@tailwindcss/vite": "^4.2.1"}
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --strictPort",
+    "build": "vite build",
+    "test": "vitest run --environment jsdom"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@testing-library/react": "^16.3.3",
+    "jsdom": "^27.4.0",
+    "tailwindcss": "^4.2.1",
+    "vite": "^8.0.13",
+    "vitest": "^4.1.12"
+  }
 }
