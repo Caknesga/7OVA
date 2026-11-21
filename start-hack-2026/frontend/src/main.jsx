@@ -1,29 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import { EventList, label } from './activity.jsx'
+import { api, post } from './api.js'
+import { LiveConversations } from './LiveConversations.jsx'
 import './style.css'
 
 const emptyHistory = { messages: [], events: [] }
-const eventNames = { 'link.opened': 'Link opened', 'page.submitted': 'Page submitted', 'attachment.opened': 'Attachment opened' }
-const label = (value) => value?.replaceAll('_', ' ') || 'Unknown'
-
-async function api(path, options) {
-  const response = await fetch('/api' + path, options)
-  const data = await response.json()
-  if (!response.ok) {
-    const error = new Error(typeof data.detail === 'string' ? data.detail : 'Check the request fields and try again.')
-    error.status = response.status
-    throw error
-  }
-  return data
-}
-
-function post(path, key, body) {
-  return api(path, {
-    method: 'POST',
-    headers: { 'Idempotency-Key': key, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-}
 
 function App() {
   const [scenario, setScenario] = useState(null)
@@ -31,6 +13,8 @@ function App() {
   const [sessions, setSessions] = useState([])
   const [session, setSession] = useState(null)
   const [history, setHistory] = useState(emptyHistory)
+  const [conversations, setConversations] = useState([])
+  const [liveHistoryError, setLiveHistoryError] = useState('')
   const [busy, setBusy] = useState('Connecting')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -60,16 +44,46 @@ function App() {
     }
   }
 
+  async function loadActivity(id) {
+    const [local, calls] = await Promise.allSettled([
+      api('/sessions/' + id + '/history'),
+      api('/sessions/' + id + '/conversations'),
+    ])
+    if (local.status === 'rejected') throw local.reason
+    setHistory(local.value)
+    if (calls.status === 'rejected') {
+      setLiveHistoryError(calls.reason.status === 404
+        ? 'Restart FastAPI to load the live conversation routes, then refresh.'
+        : calls.reason.message)
+      return false
+    }
+    setLiveHistoryError('')
+    setConversations(calls.value)
+    return true
+  }
+
+  async function conversationChanged(receipt) {
+    if (Number.isFinite(receipt?.touches_used)) {
+      setSession((previous) => ({
+        ...previous,
+        touches_used: Math.max(previous.touches_used ?? 0, receipt.touches_used),
+      }))
+    }
+    const loaded = await loadActivity(session.session_id).catch(() => false)
+    if (!loaded) setLiveHistoryError('Could not reload saved activity. Use Refresh to reopen the session.')
+  }
+
   async function inspect(id, summary = null) {
     setSession((previous) => previous?.session_id === id ? previous : summary)
     setHistory(emptyHistory)
+    setConversations([])
+    setLiveHistoryError('')
     setLive(false)
-    const local = await api('/sessions/' + id + '/history')
-    setHistory(local)
+    await loadActivity(id)
     const details = await api('/sessions/' + id)
     setSession(details)
     await api('/sessions/' + id + '/events')
-    setHistory(await api('/sessions/' + id + '/history'))
+    await loadActivity(id)
     setLive(true)
   }
 
@@ -89,6 +103,8 @@ function App() {
     } else {
       setSession(null)
       setHistory(emptyHistory)
+      setConversations([])
+      setLiveHistoryError('')
       setLive(false)
     }
   }
@@ -208,10 +224,21 @@ function App() {
             <div className="tabs" aria-label="Activity view">
               <button type="button" aria-pressed={tab === 'conversation'} onClick={() => setTab('conversation')}>Conversation</button>
               <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Events</button>
+              <button type="button" aria-pressed={tab === 'live'} onClick={() => setTab('live')}>Live Conversations</button>
             </div>
           </div>
 
-          <div className="feed">
+          {session && <div hidden={tab !== 'live'} aria-busy={!!busy}>
+            {liveHistoryError && <p className="live-error" role="alert">{liveHistoryError}</p>}
+            <LiveConversations key={session.session_id} session={session} targets={targets} target={target}
+              setTarget={setTarget} conversations={conversations} ready={live && !liveHistoryError} remaining={remaining}
+              busy={busy} run={run} onChange={conversationChanged} visible={tab === 'live'} />
+          </div>}
+          {tab === 'live' && !session && <div className="feed">
+            <div className="empty"><b>No session selected</b><p>Select or create a practice session to start a live conversation.</p></div>
+          </div>}
+
+          {tab !== 'live' && <div className="feed">
             {tab === 'conversation'
               ? <>
                   {!history.messages.length && !replies.length && <div className="empty"><b>No conversation yet</b><p>Sent messages and simulator replies appear here.</p></div>}
@@ -226,15 +253,11 @@ function App() {
                   {replies.filter((event) => !history.messages.some((message) => event.in_reply_to === message.message_id)).map(replyCard)}
                 </>
               : history.events.length
-                ? <ol className="event-list">{history.events.map((event) => <li key={event.id}>
-                    <b>{eventNames[event.type] || label(event.type)}</b>
-                    <small>{event.in_reply_to || event.message_id || event.id}</small>
-                    <p>{event.body || event.url || event.fields?.join(', ') || event.attachment_id || event.page_id}</p>
-                  </li>)}</ol>
+                ? <EventList events={history.events} />
                 : <div className="empty"><b>No events recorded</b><p>Replies and observable events from this session appear here.</p></div>}
-          </div>
+          </div>}
 
-          {session && <form className="compose" onSubmit={send}>
+          {session && tab !== 'live' && <form className="compose" onSubmit={send}>
             <fieldset disabled={!!busy || !live || session.status !== 'active' || remaining === 0}>
               <legend>Send a message</legend>
               <div className="grid gap-3 sm:grid-cols-2">

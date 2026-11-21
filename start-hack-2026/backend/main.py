@@ -12,12 +12,13 @@ from uuid import UUID
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, ValidationError
+
+from . import conversations as live
 
 ROOT = Path(__file__).resolve().parents[1]
 API = "https://target-api.apps.01.cf.eu01.stackit.cloud/v1"
 PRACTICE = "practice"
-LIVE_CHANNELS = {"phone_call", "video_call", "teams_call", "live_chat"}
 Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,100}$")]
 OperationKey = Annotated[UUID, Header(alias="Idempotency-Key")]
 MessageText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=16000)]
@@ -29,6 +30,43 @@ class Message(BaseModel):
     channel: Identifier
     subject: Annotated[str, StringConstraints(max_length=300)] = ""
     body: MessageText
+
+
+class StartConversation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to: Identifier
+    channel: live.LiveChannel
+
+
+class ConversationTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    say: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
+
+
+class StartReceipt(BaseModel):
+    conversation_id: Identifier
+    status: str
+    persona_says: str | None = None
+    ended: StrictBool = False
+    turns_used: Annotated[int, Field(strict=True, ge=0, le=live.MAX_TURNS)] = 0
+    touches_used: Annotated[int, Field(strict=True, ge=0)] | None = None
+    events: list[dict] = Field(default_factory=list)
+
+
+class TurnReceipt(BaseModel):
+    conversation_id: Identifier | None = None
+    status: str | None = None
+    persona_says: str | None = None
+    ended: StrictBool
+    turns_used: Annotated[int, Field(strict=True, ge=1, le=live.MAX_TURNS)]
+    events: list[dict]
+
+
+def parse_receipt(model, result):
+    try:
+        return model.model_validate(result)
+    except ValidationError:
+        raise HTTPException(502, "Unexpected simulator conversation response.") from None
 
 
 def records(value, key):
@@ -55,7 +93,7 @@ def message_channels(value):
                 continue
             item = item.get("id") or item.get("channel") or item.get("name")
         if isinstance(item, str) and re.fullmatch(r"[a-z][a-z0-9_]*", item):
-            if item not in LIVE_CHANNELS:
+            if item not in live.LIVE_CHANNELS:
                 names.append(item)
     if value and not names:
         raise HTTPException(502, "No message channels could be read from the simulator.")
@@ -71,6 +109,8 @@ def create_app(team_key=None, db_path=None, transport=None):
     @contextmanager
     def connect():
         with closing(sqlite3.connect(database)) as connection, connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
             yield connection
 
     @asynccontextmanager
@@ -85,7 +125,7 @@ def create_app(team_key=None, db_path=None, transport=None):
                 CREATE TABLE IF NOT EXISTS operations (
                     id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT
                 );
-            """)
+            """ + live.SCHEMA)
         with httpx.Client(
             base_url=API + "/", timeout=120, follow_redirects=False,
             trust_env=False, transport=transport,
@@ -96,12 +136,12 @@ def create_app(team_key=None, db_path=None, transport=None):
 
     app = FastAPI(title="START Hack Practice Console", lifespan=lifespan)
 
-    def upstream(path, *, payload=None, key=None):
+    def upstream(path, *, payload=None, key=None, method=None, allow_empty=False):
         if not secret:
             raise HTTPException(503, "Set TEAM_KEY in the backend environment, then restart it.")
         try:
             response = app.state.client.request(
-                "GET" if payload is None else "POST", path, json=payload,
+                method or ("GET" if payload is None else "POST"), path, json=payload,
                 headers={"Idempotency-Key": key} if key else None,
             )
         except httpx.TimeoutException:
@@ -125,6 +165,8 @@ def create_app(team_key=None, db_path=None, transport=None):
                 status, messages.get(status, "Unexpected response from the simulator."),
                 headers={"Retry-After": retry_after} if retry_after and status in {429, 503} else None,
             )
+        if allow_empty and not response.content.strip():
+            return {}
         try:
             # Never relay an echoed key, even inside a successful simulator payload.
             data = response.json()
@@ -148,10 +190,24 @@ def create_app(team_key=None, db_path=None, transport=None):
             if not isinstance(event_id, str) or not event_id:
                 raise HTTPException(502, "Simulator returned an event without an ID.")
             db.execute("""INSERT INTO history VALUES (?, 'event', ?, ?)
-                ON CONFLICT(session, kind, id) DO UPDATE SET payload = excluded.payload""",
+                ON CONFLICT(session, kind, id) DO UPDATE SET payload =
+                    CASE WHEN json_extract(excluded.payload, '$.conversation_id') IS NULL
+                            AND json_extract(history.payload, '$.conversation_id') IS NOT NULL
+                         THEN json_set(excluded.payload, '$.conversation_id',
+                                       json_extract(history.payload, '$.conversation_id'))
+                         ELSE excluded.payload END""",
                 (sid, event_id, json.dumps(event)))
 
-    def operation(key, path, payload, save=None):
+    def save_conversation_events(db, sid, cid, events):
+        linked = []
+        for event in events:
+            if event.get("conversation_id") not in (None, cid):
+                raise HTTPException(502, "Simulator returned an event for another conversation.")
+            linked.append({**event, "conversation_id": cid})
+        store_events(db, sid, linked)
+        return linked
+
+    def operation(key, path, payload, save=None, *, validate=None, close_on_conflict=None):
         key = str(key)
         fingerprint = hashlib.sha256(json.dumps([path, payload], sort_keys=True).encode()).hexdigest()
         with write_lock:
@@ -163,10 +219,17 @@ def create_app(team_key=None, db_path=None, transport=None):
                     return json.loads(row[1])
                 if row and save is None:
                     raise HTTPException(409, "Session creation may have succeeded. Refresh the session list before creating another.")
+            if validate is not None:
+                validate()
+            with connect() as db:
                 db.execute("INSERT OR IGNORE INTO operations VALUES (?, ?, NULL)", (key, fingerprint))
             try:
                 result = upstream(path, payload=payload, key=key)
             except HTTPException as error:
+                if close_on_conflict is not None and error.status_code == 409:
+                    with connect() as db:
+                        live.close(db, close_on_conflict)
+                    raise HTTPException(409, "The simulator has closed this conversation.") from None
                 if save is None and error.status_code in {400, 401, 403, 404, 409, 422, 429}:
                     with connect() as db:
                         db.execute("DELETE FROM operations WHERE id = ?", (key,))
@@ -176,7 +239,9 @@ def create_app(team_key=None, db_path=None, transport=None):
                 raise HTTPException(502, "Unexpected simulator write response.")
             with connect() as db:
                 if save is not None:
-                    save(db, result)
+                    saved = save(db, result)
+                    if saved is not None:
+                        result = saved
                 elif result.get("scenario_id") != PRACTICE or not result.get("session_id"):
                     raise HTTPException(502, "Unexpected practice session response.")
                 db.execute("UPDATE operations SET result = ? WHERE id = ?", (json.dumps(result), key))
@@ -229,7 +294,7 @@ def create_app(team_key=None, db_path=None, transport=None):
     @app.post("/api/sessions/{sid}/messages")
     def send(sid: Identifier, message: Message, key: OperationKey):
         practice_session(sid)
-        if message.channel in LIVE_CHANNELS:
+        if message.channel in live.LIVE_CHANNELS:
             raise HTTPException(422, "Select a message channel.")
         payload = message.model_dump()
         if secret in json.dumps(payload, ensure_ascii=False):
@@ -246,6 +311,76 @@ def create_app(team_key=None, db_path=None, transport=None):
             store_events(db, sid, records(result, "events"))
 
         return operation(key, f"sessions/{sid}/messages", payload, save)
+
+    @app.get("/api/sessions/{sid}/conversations")
+    def list_live_conversations(sid: Identifier):
+        with connect() as db:
+            db.execute("BEGIN")
+            return live.list_for_session(db, sid)
+
+    @app.post("/api/sessions/{sid}/conversations", status_code=201)
+    def start_live_conversation(sid: Identifier, start: StartConversation, key: OperationKey):
+        def save(db, result):
+            receipt = parse_receipt(StartReceipt, result)
+            receipt.ended = receipt.ended or receipt.status == "ended"
+            if receipt.ended:
+                receipt.status = "ended"
+            live.record_start(db, sid, start.to, start.channel, receipt)
+            receipt.events = save_conversation_events(db, sid, receipt.conversation_id, receipt.events)
+            return receipt.model_dump()
+
+        return operation(key, f"sessions/{sid}/conversations", start.model_dump(), save,
+                         validate=lambda: practice_session(sid))
+
+    @app.post("/api/conversations/{cid}/turns")
+    def live_turn(cid: Identifier, turn: ConversationTurn, key: OperationKey):
+        if secret and secret in turn.say:
+            raise HTTPException(422, "Remove the team key from the turn.")
+
+        def validate():
+            with connect() as db:
+                conversation = live.get(db, cid)
+            if conversation["ended"]:
+                raise HTTPException(409, "This conversation has ended.")
+            if conversation["turns_used"] >= live.MAX_TURNS:
+                raise HTTPException(409, "This conversation has reached its 10-turn limit.")
+
+        def save(db, result):
+            conversation = live.get(db, cid)
+            receipt = parse_receipt(TurnReceipt, result)
+            if receipt.conversation_id not in (None, cid):
+                raise HTTPException(502, "Simulator replied for another conversation.")
+            receipt.conversation_id = cid
+            receipt.ended = receipt.ended or receipt.status == "ended"
+            receipt.status = "ended" if receipt.ended else (receipt.status or conversation["status"])
+            live.record_turn(db, cid, turn.say, receipt)
+            receipt.events = save_conversation_events(db, conversation["session"], cid, receipt.events)
+            return receipt.model_dump()
+
+        return operation(key, f"conversations/{cid}/turns", turn.model_dump(), save,
+                         validate=validate, close_on_conflict=cid)
+
+    @app.post("/api/conversations/{cid}/end")
+    def end_live_conversation(cid: Identifier, _key: OperationKey):
+        with write_lock, connect() as db:
+            conversation = live.get(db, cid)
+            events = []
+            if not conversation["ended"]:
+                try:
+                    response = upstream(f"conversations/{cid}/end", method="POST", allow_empty=True)
+                except HTTPException as error:
+                    if error.status_code != 409:
+                        raise
+                    response = {}
+                if not isinstance(response, dict):
+                    raise HTTPException(502, "Unexpected simulator conversation end response.")
+                events = save_conversation_events(
+                    db, conversation["session"], cid, records(response.get("events", []), "events"),
+                )
+                live.close(db, cid)
+
+            return {"conversation_id": cid, "status": "ended", "ended": True,
+                    "turns_used": conversation["turns_used"], "events": events}
 
     return app
 
