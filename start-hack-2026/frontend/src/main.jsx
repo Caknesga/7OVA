@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { EventList, label } from './activity.jsx'
+import { EventList, EventSummary, label } from './activity.jsx'
 import { api, post } from './api.js'
 import { LiveConversations } from './LiveConversations.jsx'
+import { AgentRuns } from './AgentRuns.jsx'
 import './style.css'
 
 const emptyHistory = { messages: [], events: [] }
@@ -16,7 +17,7 @@ function App() {
   const [conversations, setConversations] = useState([])
   const [liveHistoryError, setLiveHistoryError] = useState('')
   const [busy, setBusy] = useState('Connecting')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
   const [notice, setNotice] = useState('')
   const [tab, setTab] = useState('conversation')
   const [target, setTarget] = useState('')
@@ -33,12 +34,12 @@ function App() {
 
   async function run(name, job) {
     setBusy(name)
-    setError('')
+    setError(null)
     setNotice('')
     try {
       await job()
     } catch (problem) {
-      setError(problem.message)
+      setError({ message: problem.message, during: name })
     } finally {
       setBusy('')
     }
@@ -178,7 +179,8 @@ function App() {
       <div aria-live="polite" className="feedback">
         {busy && <p role="status">{busy}…</p>}
         {notice && <p role="status">{notice}</p>}
-        {error && <p role="alert" className="error">{error}</p>}
+        {error && (tab !== 'agent' || error.during !== 'Connecting') &&
+          <p role="alert" className="error">{error.message}</p>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -220,11 +222,14 @@ function App() {
 
         <section className="panel conversation">
           <div className="conversation-head">
-            <div><h2>Session activity</h2><p>{session ? session.session_id + ' · ' + label(session.status) : 'Select or create a practice session.'}</p></div>
+            <div><h2>{tab === 'agent' ? 'AI Agent runs' : 'Session activity'}</h2>
+              <p>{tab === 'agent' ? 'Run and review simulator QA.' :
+                session ? session.session_id + ' · ' + label(session.status) : 'Select or create a practice session.'}</p></div>
             <div className="tabs" aria-label="Activity view">
               <button type="button" aria-pressed={tab === 'conversation'} onClick={() => setTab('conversation')}>Conversation</button>
               <button type="button" aria-pressed={tab === 'events'} onClick={() => setTab('events')}>Events</button>
               <button type="button" aria-pressed={tab === 'live'} onClick={() => setTab('live')}>Live Conversations</button>
+              <button type="button" aria-pressed={tab === 'agent'} onClick={() => setTab('agent')}>AI Agent</button>
             </div>
           </div>
 
@@ -238,7 +243,9 @@ function App() {
             <div className="empty"><b>No session selected</b><p>Select or create a practice session to start a live conversation.</p></div>
           </div>}
 
-          {tab !== 'live' && <div className="feed">
+          {tab === 'agent' && <AgentRuns targets={targets} sessions={sessions} />}
+
+          {(tab === 'conversation' || tab === 'events') && <div className="feed">
             {tab === 'conversation'
               ? <>
                   {!history.messages.length && !replies.length && <div className="empty"><b>No conversation yet</b><p>Sent messages and simulator replies appear here.</p></div>}
@@ -252,12 +259,13 @@ function App() {
                   </React.Fragment>)}
                   {replies.filter((event) => !history.messages.some((message) => event.in_reply_to === message.message_id)).map(replyCard)}
                 </>
-              : history.events.length
-                ? <EventList events={history.events} />
-                : <div className="empty"><b>No events recorded</b><p>Replies and observable events from this session appear here.</p></div>}
+              : <>
+                  <EventSummary events={history.events} />
+                  {history.events.length > 0 && <EventList events={history.events} />}
+                </>}
           </div>}
 
-          {session && tab !== 'live' && <form className="compose" onSubmit={send}>
+          {session && (tab === 'conversation' || tab === 'events') && <form className="compose" onSubmit={send}>
             <fieldset disabled={!!busy || !live || session.status !== 'active' || remaining === 0}>
               <legend>Send a message</legend>
               <div className="grid gap-3 sm:grid-cols-2">

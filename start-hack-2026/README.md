@@ -1,6 +1,6 @@
 # START Hack 2026 · revel8 Practice Console
 
-A local workspace for the revel8 practice scenario. Reopen sessions, send messages, and have text-based live conversations with simulator personas. Every message and conversation turn is sent manually.
+A local workspace for the revel8 practice scenario. Reopen sessions, send manual messages, have text-based live conversations, and run automated QA checks.
 
 ## Install
 
@@ -31,12 +31,31 @@ npm --prefix frontend run dev
 
 Open [the practice dashboard](http://127.0.0.1:5173/). Create a practice session or select an existing one. The Conversation view groups replies with the messages they reference. The Events view lists replies and other observable events. Refresh reloads simulator state. Remaining touches come from the simulator's budget and usage counters.
 
+The **Events** view summarizes observed replies, link opens, form submissions, and attachment opens from the recorded event log. The counts describe simulator activity and do not assign an outcome or trigger any action.
+
 ### Live Conversations
 
 1. Select a practice session and open **Live Conversations**. Choose a target and one of Phone call, Video call, Teams call, or Live chat.
 2. Click **Start Conversation** to see the simulator's greeting. A start costs one session touch. Each conversation allows up to ten text turns across all four channels.
 3. Type one turn at a time and review the reply and conversation events. Use **End Conversation** to close it. The simulator can also end it, and starting another conversation with the same target closes the earlier one in the session.
 4. Use **Saved conversation** to reopen a transcript from the selected session. The status and turn counter show when further turns are unavailable.
+
+### AI Agent
+
+Open **AI Agent**, leave **Mock** selected, choose a touch limit of at least two, and click **Start run**. The offline demo uses a fictional test persona and a deterministic LLM fixture. You can watch it start a live chat, send a test turn, end the chat, send a separate message, and record the observed replies. It runs without keys or external API calls.
+
+To run against the official practice simulator, add the following settings to the existing `.env` and restart FastAPI:
+
+- `OPENAI_API_KEY` is your OpenAI project API key. Store it alongside your existing `TEAM_KEY` in the backend environment.
+- `OPENAI_MODEL` is a model your OpenAI project can use with the Responses API and strict structured outputs. [Structured outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs)
+- `OPENAI_INPUT_USD_PER_MTOK` and `OPENAI_OUTPUT_USD_PER_MTOK` are the standard prices in USD per million tokens for that model. Set `OPENAI_CACHED_USD_PER_MTOK` if applicable. Omitted cached pricing is estimated at the uncached input rate. [OpenAI pricing](https://openai.com/api/pricing/)
+- `OPENAI_BUDGET_USD`, `OPENAI_SOFT_LIMIT_USD`, and `OPENAI_MAX_RUN_COST_USD` default to $20, $15, and $2 respectively.
+
+Create a practice session with **New session**, then choose **Official practice**, the target, and that session in **AI Agent**. Set a touch cap, check the confirmation, and start the run. The dashboard displays the configured model, run history, observations, tokens, and estimated spending. These are local estimates for this database. Check your OpenAI project for billing, credits, and usage outside this dashboard.
+
+The planner may select supported channels and test actions. The generator selects from the approved transparent QA phrases in `backend/qa.py`. OpenAI receives bounded state such as allowed actions and reply indicators. Real QA timelines record outgoing phrases and response metadata. The existing Conversation and Live Conversations views display full simulator transcripts. SQLite adds QA tables on startup.
+
+Run one FastAPI worker. The worker serializes automated runs and reserves estimated cost before each paid request. Unknown charges after a timeout keep their local reserve. **Stop run** prevents further work at the next step boundary, and any in-flight request can finish. If a run stops with a conversation open, you can end it in the manual tab. Interrupted runs remain available in history.
 
 ## History and retries
 

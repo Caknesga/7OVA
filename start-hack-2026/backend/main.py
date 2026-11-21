@@ -5,7 +5,9 @@ import re
 import sqlite3
 from contextlib import asynccontextmanager, closing, contextmanager
 from pathlib import Path
-from threading import Lock
+from collections import deque
+from threading import Lock, RLock
+from time import monotonic
 from typing import Annotated
 from uuid import UUID
 
@@ -15,6 +17,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, ValidationError
 
 from . import conversations as live
+from .qa import MESSAGE_CHANNELS, PHRASES, create_qa
 
 ROOT = Path(__file__).resolve().parents[1]
 API = "https://target-api.apps.01.cf.eu01.stackit.cloud/v1"
@@ -100,11 +103,13 @@ def message_channels(value):
     return list(dict.fromkeys(names))
 
 
-def create_app(team_key=None, db_path=None, transport=None):
+def create_app(team_key=None, db_path=None, transport=None, *, qa_options=None):
     load_dotenv(ROOT / ".env")
     secret = os.environ.get("TEAM_KEY", "") if team_key is None else team_key
     database = Path(db_path or os.environ.get("DATABASE_PATH", ROOT / "data/history.sqlite3"))
-    write_lock = Lock()
+    write_lock = RLock()
+    upstream_lock = Lock()
+    request_times = deque()
 
     @contextmanager
     def connect():
@@ -132,7 +137,9 @@ def create_app(team_key=None, db_path=None, transport=None):
             headers={"Authorization": f"Bearer {secret}"},
         ) as client:
             app.state.client = client
-            yield
+            request_times.clear()
+            async with qa_lifespan():
+                yield
 
     app = FastAPI(title="START Hack Practice Console", lifespan=lifespan)
 
@@ -140,10 +147,19 @@ def create_app(team_key=None, db_path=None, transport=None):
         if not secret:
             raise HTTPException(503, "Set TEAM_KEY in the backend environment, then restart it.")
         try:
-            response = app.state.client.request(
-                method or ("GET" if payload is None else "POST"), path, json=payload,
-                headers={"Idempotency-Key": key} if key else None,
-            )
+            with upstream_lock:
+                now = monotonic()
+                while request_times and now - request_times[0] >= 60:
+                    request_times.popleft()
+                if len(request_times) >= 60:
+                    delay = int(60 - (now - request_times[0])) + 1
+                    raise HTTPException(429, "Simulator request limit reached.",
+                                        headers={"Retry-After": str(delay)})
+                request_times.append(now)
+                response = app.state.client.request(
+                    method or ("GET" if payload is None else "POST"), path, json=payload,
+                    headers={"Idempotency-Key": key} if key else None,
+                )
         except httpx.TimeoutException:
             raise HTTPException(504, "Simulator timed out after 120 seconds.") from None
         except httpx.RequestError:
@@ -382,6 +398,59 @@ def create_app(team_key=None, db_path=None, transport=None):
             return {"conversation_id": cid, "status": "ended", "ended": True,
                     "turns_used": conversation["turns_used"], "events": events}
 
+    class PracticeQA:
+        available = bool(secret)
+
+        def research(self, target):
+            scenario = next((item for item in scenarios() if item.get("open")), None)
+            person = next((item for item in scenario.get("targets", [])
+                           if item.get("id") == target), None) if scenario else None
+            if person is None:
+                raise HTTPException(404, "Practice QA target not found.")
+            available = upstream("channels")
+            named_messages = message_channels(available)
+            live_entries = available
+            if isinstance(available, dict):
+                live_entries = next((available[key] for key in (
+                    "conversation", "conversations", "live", "live_channels", "conversation_channels", "channels"
+                ) if key in available), [])
+            live_names = [
+                entry.get("id") or entry.get("channel") or entry.get("name") if isinstance(entry, dict) else entry
+                for entry in live_entries
+            ] if isinstance(live_entries, list) else []
+            return {"id": target, "name": str(person.get("name") or target)[:200],
+                    "role": str(person.get("role") or "")[:300], "source": "revel8 practice scenario",
+                    "message_channels": [name for name in MESSAGE_CHANNELS if name in named_messages],
+                    "live_channels": [name for name in live.LIVE_CHANNELS if name in live_names]}
+
+        def session(self, session_id):
+            return practice_session(session_id)
+
+        def execute(self, action, sid, target, channel, phrase, cid, key, *, cap, retry, check_stop):
+            with write_lock:
+                check_stop()
+                if action in {"send_message", "start_conversation"} and not retry:
+                    current = practice_session(sid)
+                    if current["status"] != "active" or current["touches_used"] >= min(cap, current["touch_budget"]):
+                        raise HTTPException(409, "Practice session limit reached.")
+                check_stop()
+                if action in {"send_message", "continue_conversation"} and phrase not in PHRASES.values():
+                    raise HTTPException(422, "Use an approved QA phrase.")
+                if action == "send_message":
+                    return send(sid, Message(to=target, channel=channel, body=phrase), key)
+                if action == "start_conversation":
+                    return start_live_conversation(sid, StartConversation(to=target, channel=channel), key)
+                with connect() as db:
+                    if live.get(db, cid)["session"] != sid:
+                        raise HTTPException(404, "Conversation not found in this QA session.")
+                if action == "continue_conversation":
+                    return live_turn(cid, ConversationTurn(say=phrase), key)
+                if action == "end_conversation":
+                    return end_live_conversation(cid, key)
+                raise HTTPException(422, "Unsupported QA action.")
+
+    qa_router, qa_lifespan = create_qa(connect, PracticeQA(), **(qa_options or {}))
+    app.include_router(qa_router)
     return app
 
 
