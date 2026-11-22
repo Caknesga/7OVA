@@ -1,17 +1,17 @@
-# Communication evaluation — s_test
+# Communication evaluation — qa_bae79f20
 
-- Evaluated at (UTC): 2026-11-22T03:31:15.313351+00:00
-- Evidence status: **no_data**
-- Successful API operations: **0/0** (N/A)
-- Contacts sent: **0**
+- Evaluated at (UTC): 2026-11-22T03:38:26.796764+00:00
+- Evidence status: **completed**
+- Successful API operations: **1/1** (100.0%)
+- Contacts sent: **1**
 - Live turns sent: **0**
-- Operations with an observed reply or utterance: **0**
-- Touches used / budget: **? / ?**
-- Remaining touches: **unknown**
+- Operations with an observed reply or utterance: **1**
+- Touches used / budget: **1 / 10**
+- Remaining touches: **9**
 
 ## Observed simulator events
 
-- Reply events: 0
+- Reply events: 1
 - Links opened: 0
 - Form submissions: 0 (contents not recorded here)
 - Attachments opened: 0
@@ -19,16 +19,16 @@
 
 ## Execution timeline
 
-No outgoing action log available.
+1. **send_message** on email: OK; response observed
 
 ## Feedback for orchestrator
 
-- Control: **review**
-- Reason: No outgoing interaction log was available for evaluation
+- Control: **decision_required**
+- Reason: Technical evaluation complete; orchestrator owns any next decision
 
 ## Warnings
 
-- No local action logs found; simulator events alone cannot reconstruct outgoing content
+- None
 
 ## Interpretation limits
 
@@ -37,4 +37,3 @@ No outgoing action log available.
 - Official jury scores for targeting, appearance, architecture and pitch cannot be inferred.
 - No generated communication strategy or sensitive response content is included.
 - No fresh GET /sessions/{id}/events evidence was supplied.
-- No current GET /sessions/{id} state was supplied; budget/status may be unknown.

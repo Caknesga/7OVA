@@ -1,0 +1,15 @@
+{
+  "session_id": "qa_empty",
+  "scenario_id": "offline_qa",
+  "target_id": "test_persona",
+  "phase": "completed",
+  "touch_budget": 10,
+  "touches_used": 0,
+  "steps_completed": 0,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "last_evaluation": null,
+  "last_error": null,
+  "updated_at": "2026-11-22T03:38:11.469278+00:00"
+}

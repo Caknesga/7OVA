@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "session_id": "qa_chat",
+  "evaluated_at": "2026-11-22T03:38:11.512446+00:00",
+  "evaluation_status": "completed",
+  "metrics": {
+    "actions_logged": 3,
+    "successful_actions": 3,
+    "failed_actions": 0,
+    "messages_sent": 0,
+    "conversations_started": 1,
+    "conversation_turns_sent": 1,
+    "conversations_ended": 1,
+    "actions_with_observable_response": 2,
+    "persona_utterances": 2,
+    "events": {
+      "reply": 0,
+      "link_opened": 0,
+      "page_submitted": 0,
+      "attachment_opened": 0,
+      "other": 0
+    },
+    "touch_budget": 1,
+    "touches_used": 1,
+    "remaining_touches": 0,
+    "transport_success_rate": 1.0
+  },
+  "timeline": [
+    {
+      "step": 1,
+      "action_type": "start_conversation",
+      "channel": "live_chat",
+      "success": true,
+      "outgoing_logged": true,
+      "message_id": null,
+      "conversation_id": "mock_conversation_1",
+      "event_types": [],
+      "persona_response_observed": true,
+      "touches_used": 1,
+      "error": null
+    },
+    {
+      "step": 2,
+      "action_type": "send_turn",
+      "channel": null,
+      "success": true,
+      "outgoing_logged": true,
+      "message_id": null,
+      "conversation_id": "mock_conversation_1",
+      "event_types": [],
+      "persona_response_observed": true,
+      "touches_used": 1,
+      "error": null
+    },
+    {
+      "step": 3,
+      "action_type": "end_conversation",
+      "channel": null,
+      "success": true,
+      "outgoing_logged": true,
+      "message_id": null,
+      "conversation_id": "mock_conversation_1",
+      "event_types": [],
+      "persona_response_observed": false,
+      "touches_used": 1,
+      "error": null
+    }
+  ],
+  "orchestrator_feedback": {
+    "control": "stop",
+    "reason": "No remaining session contacts",
+    "session_status": "active",
+    "conversation_active": false
+  },
+  "warnings": [],
+  "limitations": [
+    "No hidden target intent, suspicion or susceptibility is available from the API.",
+    "Response and click observations do not establish factual accuracy or consent.",
+    "Official jury scores for targeting, appearance, architecture and pitch cannot be inferred.",
+    "No generated communication strategy or sensitive response content is included.",
+    "No fresh GET /sessions/{id}/events evidence was supplied."
+  ],
+  "source_files": [
+    "C:\\Users\\denal\\Desktop\\Engineering\\TUM_Vorlesungen\\7OVA\\7OVA\\pytest_temp_local\\test_live_chat_start_turn_end0\\logs\\qa_chat.jsonl"
+  ]
+}

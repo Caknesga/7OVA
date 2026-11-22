@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "session_id": "qa_max",
+  "evaluated_at": "2026-11-22T03:38:11.530319+00:00",
+  "evaluation_status": "completed",
+  "metrics": {
+    "actions_logged": 1,
+    "successful_actions": 1,
+    "failed_actions": 0,
+    "messages_sent": 1,
+    "conversations_started": 0,
+    "conversation_turns_sent": 0,
+    "conversations_ended": 0,
+    "actions_with_observable_response": 1,
+    "persona_utterances": 0,
+    "events": {
+      "reply": 1,
+      "link_opened": 0,
+      "page_submitted": 0,
+      "attachment_opened": 0,
+      "other": 0
+    },
+    "touch_budget": 5,
+    "touches_used": 1,
+    "remaining_touches": 4,
+    "transport_success_rate": 1.0
+  },
+  "timeline": [
+    {
+      "step": 1,
+      "action_type": "send_message",
+      "channel": "email",
+      "success": true,
+      "outgoing_logged": true,
+      "message_id": "mock_message_1",
+      "conversation_id": null,
+      "event_types": [
+        "reply"
+      ],
+      "persona_response_observed": false,
+      "touches_used": 1,
+      "error": null
+    }
+  ],
+  "orchestrator_feedback": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": null
+  },
+  "warnings": [],
+  "limitations": [
+    "No hidden target intent, suspicion or susceptibility is available from the API.",
+    "Response and click observations do not establish factual accuracy or consent.",
+    "Official jury scores for targeting, appearance, architecture and pitch cannot be inferred.",
+    "No generated communication strategy or sensitive response content is included.",
+    "No fresh GET /sessions/{id}/events evidence was supplied."
+  ],
+  "source_files": [
+    "C:\\Users\\denal\\Desktop\\Engineering\\TUM_Vorlesungen\\7OVA\\7OVA\\pytest_temp_local\\test_max_steps_stops0\\logs\\qa_max.jsonl"
+  ]
+}

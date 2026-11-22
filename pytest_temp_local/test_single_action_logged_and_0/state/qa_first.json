@@ -1,0 +1,20 @@
+{
+  "session_id": "qa_first",
+  "scenario_id": "offline_qa",
+  "target_id": "test_persona",
+  "phase": "completed",
+  "touch_budget": 3,
+  "touches_used": 1,
+  "steps_completed": 1,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "last_evaluation": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": null
+  },
+  "last_error": null,
+  "updated_at": "2026-11-22T03:38:11.440096+00:00"
+}

@@ -1,0 +1,20 @@
+{
+  "session_id": "qa_budget",
+  "scenario_id": "offline_qa",
+  "target_id": "test_persona",
+  "phase": "stopped",
+  "touch_budget": 1,
+  "touches_used": 1,
+  "steps_completed": 1,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "last_evaluation": {
+    "control": "stop",
+    "reason": "No remaining session contacts",
+    "session_status": "active",
+    "conversation_active": null
+  },
+  "last_error": "No remaining session contacts",
+  "updated_at": "2026-11-22T03:38:11.459432+00:00"
+}
