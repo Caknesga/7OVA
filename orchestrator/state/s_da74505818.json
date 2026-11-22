@@ -1,0 +1,50 @@
+{
+  "session_id": "s_da74505818",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "stopped",
+  "touch_budget": 30,
+  "touches_used": 2,
+  "steps_completed": 5,
+  "conversation_id": "c_62dd9bb1a0",
+  "conversation_active": false,
+  "turns_used": 3,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": {
+    "decision": "execute",
+    "planned_action": {
+      "action_type": "send_message",
+      "target_id": "robert",
+      "channel": "email",
+      "sender": {
+        "name": "QA Tester",
+        "address": null
+      },
+      "subject": "Communication interface QA test",
+      "body": "Hello, this is a communication interface test in the simulated environment. Can you confirm receipt?",
+      "say": null,
+      "attachments": []
+    },
+    "reasoning_summary": "The conversation thread ended without a successful message delivery due to lack of clarity and closure from the simulated persona. An email receipt action is appropriate to provide context and solicit further information to complete the testing objective.",
+    "confidence": 0.8,
+    "expected_observable_events": [
+      "message_action_logged",
+      "email_sent"
+    ]
+  },
+  "pending_request_id": null,
+  "pending_action": null,
+  "last_evaluation": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": false
+  },
+  "last_error": "Configured QA step limit reached",
+  "updated_at": "2026-11-22T11:40:13.664765+00:00"
+}
