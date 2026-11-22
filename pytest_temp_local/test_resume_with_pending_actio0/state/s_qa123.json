@@ -1,0 +1,33 @@
+{
+  "session_id": "s_qa123",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "needs_review",
+  "touch_budget": 3,
+  "touches_used": 0,
+  "steps_completed": 0,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": null,
+  "pending_request_id": "stable-request",
+  "pending_action": {
+    "action_type": "send_message",
+    "target_id": "robert",
+    "channel": "email",
+    "sender": {
+      "name": "QA Tester"
+    },
+    "subject": "Communication interface QA test",
+    "body": "Hello, this is a communication interface test in the simulated environment. Can you confirm receipt?"
+  },
+  "last_evaluation": null,
+  "last_error": "Pending action may have executed; reconcile manually",
+  "updated_at": "2026-11-22T10:42:58.258765+00:00"
+}

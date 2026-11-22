@@ -1,0 +1,51 @@
+{
+  "research_report": {
+    "schema_version": "1.0",
+    "target": {
+      "id": "test_persona",
+      "name": "QA Test Persona",
+      "role": "Simulation target",
+      "company": "Example Simulation",
+      "scenario_id": "offline_qa"
+    },
+    "research_metadata": {
+      "query": "Public information about example simulation",
+      "researched_at": "2026-11-22T00:00:00Z",
+      "status": "completed"
+    },
+    "company_findings": [],
+    "person_findings": [],
+    "sources": [],
+    "research_gaps": [],
+    "uncertainties": [],
+    "full_report_markdown": ""
+  },
+  "qa_objective": {
+    "description": "Test simulator message-delivery and response event parsing",
+    "completion_criteria": ["A message action is logged and its result is processed"],
+    "completion_met": false,
+    "prohibited_actions": ["Impersonation", "Credential requests", "Sensitive data requests"]
+  },
+  "simulator_environment": {
+    "session_id": "qa_example",
+    "target_id": "test_persona",
+    "allowed_channels": ["email", "live_chat"],
+    "remaining_touch_budget": 10,
+    "conversation_active": false,
+    "conversation_id": null,
+    "remaining_conversation_turns": 0
+  },
+  "interaction_history": {
+    "previous_actions": [],
+    "simulator_replies": [],
+    "observable_events": [],
+    "last_evaluation": null
+  },
+  "operational_constraints": {
+    "max_actions_per_run": 10,
+    "actions_used": 0,
+    "time_limit_seconds": 120,
+    "permitted_sender": {"name": "QA Tester"},
+    "retry_policy": "idempotent_only"
+  }
+}

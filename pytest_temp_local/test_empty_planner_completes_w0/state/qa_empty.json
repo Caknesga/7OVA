@@ -9,7 +9,13 @@
   "conversation_id": null,
   "conversation_active": false,
   "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [],
+  "research_report_path": null,
+  "last_planner_decision": null,
+  "pending_request_id": null,
+  "pending_action": null,
   "last_evaluation": null,
   "last_error": null,
-  "updated_at": "2026-11-22T03:38:11.469278+00:00"
+  "updated_at": "2026-11-22T10:42:58.079918+00:00"
 }

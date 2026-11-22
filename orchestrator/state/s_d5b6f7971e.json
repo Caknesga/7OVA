@@ -1,0 +1,30 @@
+{
+  "session_id": "s_d5b6f7971e",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "needs_review",
+  "touch_budget": 30,
+  "touches_used": 0,
+  "steps_completed": 0,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": {
+    "decision": "insufficient_information",
+    "planned_action": null,
+    "reasoning_summary": "The current state does not have an active conversation or prior messages, which are necessary to test message delivery and response parsing. No observable events have occurred yet, indicating a lack of necessary context for further action.",
+    "confidence": 0.8,
+    "expected_observable_events": []
+  },
+  "pending_request_id": null,
+  "pending_action": null,
+  "last_evaluation": null,
+  "last_error": "The current state does not have an active conversation or prior messages, which are necessary to test message delivery and response parsing. No observable events have occurred yet, indicating a lack of necessary context for further action.",
+  "updated_at": "2026-11-22T10:43:39.942259+00:00"
+}

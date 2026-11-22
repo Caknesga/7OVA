@@ -1,0 +1,44 @@
+{
+  "session_id": "s_qa123",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "completed",
+  "touch_budget": 3,
+  "touches_used": 1,
+  "steps_completed": 1,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": {
+    "decision": "execute",
+    "planned_action": {
+      "action_type": "send_message",
+      "target_id": "robert",
+      "channel": "email",
+      "sender": {
+        "name": "QA Tester",
+        "address": null
+      },
+      "subject": "Communication interface QA test",
+      "body": "Hello, this is a communication interface test in the simulated environment. Can you confirm receipt?",
+      "say": null,
+      "attachments": []
+    }
+  },
+  "pending_request_id": null,
+  "pending_action": null,
+  "last_evaluation": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": null
+  },
+  "last_error": null,
+  "updated_at": "2026-11-22T10:42:58.226600+00:00"
+}

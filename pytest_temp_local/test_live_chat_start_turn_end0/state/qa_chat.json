@@ -9,6 +9,12 @@
   "conversation_id": "mock_conversation_1",
   "conversation_active": false,
   "turns_used": 1,
+  "session_status": "active",
+  "allowed_channels": [],
+  "research_report_path": null,
+  "last_planner_decision": null,
+  "pending_request_id": null,
+  "pending_action": null,
   "last_evaluation": {
     "control": "stop",
     "reason": "No remaining session contacts",
@@ -16,5 +22,5 @@
     "conversation_active": false
   },
   "last_error": "No remaining session contacts",
-  "updated_at": "2026-11-22T03:38:11.513548+00:00"
+  "updated_at": "2026-11-22T10:42:58.128331+00:00"
 }

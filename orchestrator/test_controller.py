@@ -90,3 +90,23 @@ def test_malicious_session_id_rejected():
 def test_no_live_transport_can_be_injected():
     with pytest.raises(TypeError):
         Orchestrator(ScriptedTestPlanner([]), communication=object())
+
+
+@pytest.mark.asyncio
+async def test_max_steps_closes_open_mock_conversation(tmp_path):
+    actions = [
+        {"action_type": "start_conversation", "target_id": "test_persona", "channel": "live_chat"},
+        {"action_type": "send_turn", "say": "Hello, this is a chat test."},
+    ]
+    out = await make_controller(tmp_path, actions, max_steps=2).run(
+        RunState(session_id="qa_cleanup", touch_budget=3)
+    )
+    assert out.phase is Phase.STOPPED
+    assert out.steps_completed == 2  # cleanup is not a planned step
+    assert out.touches_used == 1
+    assert out.conversation_active is False
+    records = [json.loads(row) for row in (tmp_path / "logs/qa_cleanup.jsonl").read_text().splitlines()]
+    assert [r["planned_action"]["action_type"] for r in records] == [
+        "start_conversation", "send_turn", "end_conversation"
+    ]
+    assert out.last_evaluation["conversation_active"] is False

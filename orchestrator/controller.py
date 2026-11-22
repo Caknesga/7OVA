@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import uuid4
@@ -24,6 +25,7 @@ except ModuleNotFoundError as exc:
     # Local standalone bundle uses communication/; the user repository uses communicate/.
     from communication.schemas import CommunicationResult, ExecutionContext, PlannedAction
 from evaluation.agent import EvaluationAgent
+from planning.agent import PlannerInput
 from .state import Phase, RunState
 
 
@@ -118,12 +120,17 @@ class Orchestrator:
         state_dir: str | Path = "orchestrator/state",
         evaluation_dir: str | Path = "evaluation/results",
         max_steps: int = 10,
+        planner_inputs: dict[str, Any] | PlannerInput | None = None,
     ) -> None:
         if not 1 <= max_steps <= 50:
             raise ValueError("max_steps must be between 1 and 50")
         if communication is not None and type(communication) is not OfflineCommunicationPort:
             raise TypeError("Only the offline QA communication port is supported")
         self.planner = planner
+        self.planner_inputs = (
+            PlannerInput.model_validate(planner_inputs).model_dump(mode="json")
+            if planner_inputs is not None else None
+        )
         self.communication = communication or OfflineCommunicationPort()
         self.log_dir = Path(log_dir)
         self.state_dir = Path(state_dir)
@@ -154,6 +161,97 @@ class Orchestrator:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
             f.flush()
 
+    def _build_planner_input(self, state: RunState) -> PlannerInput:
+        """Refresh the planner's five-input contract using the current offline state.
+
+        Research and QA configuration remain in the supplied template. Dynamic
+        session information and earlier simulated interactions come from RunState
+        and the append-only communication log.
+        """
+        if self.planner_inputs is None:
+            raise ValueError("planner_inputs must be provided for PlanningAgent")
+
+        data = deepcopy(self.planner_inputs)
+        data["simulator_environment"].update({
+            "session_id": state.session_id,
+            "target_id": state.target_id,
+            "remaining_touch_budget": state.remaining_touches,
+            "conversation_active": state.conversation_active,
+            "conversation_id": state.conversation_id if state.conversation_active else None,
+            "remaining_conversation_turns": state.remaining_turns,
+        })
+        data["operational_constraints"]["actions_used"] = state.steps_completed
+
+        history_entries: list[dict[str, Any]] = []
+        path = self.log_dir / f"{state.session_id}.jsonl"
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    item = json.loads(line)
+                    if not isinstance(item, dict):
+                        raise ValueError("Malformed interaction log entry")
+                    history_entries.append(item)
+
+        previous_actions = []
+        replies = []
+        events = []
+        for entry in history_entries:
+            action = entry.get("planned_action") or {}
+            result = entry.get("communication_result") or {}
+            if not isinstance(action, dict) or not isinstance(result, dict):
+                raise ValueError("Interaction log entry has invalid action or response")
+            previous_actions.append(action)
+            if result.get("persona_says"):
+                replies.append({
+                    "conversation_id": result.get("conversation_id"),
+                    "persona_says": result["persona_says"],
+                })
+            for event in result.get("events") or []:
+                if isinstance(event, dict):
+                    events.append(event)
+                    if event.get("type") == "reply":
+                        replies.append(event)
+
+        data["interaction_history"] = {
+            "previous_actions": previous_actions,
+            "simulator_replies": replies,
+            "observable_events": events,
+            "last_evaluation": state.last_evaluation,
+        }
+        return PlannerInput.model_validate(data)
+
+    async def _cleanup_conversation(self, state: RunState) -> None:
+        """Close the mock chat at workflow exit and include closure in the log."""
+        if not state.conversation_active or not state.conversation_id:
+            return
+        action = PlannedAction(action_type="end_conversation")
+        context = ExecutionContext(
+            session_id=state.session_id,
+            conversation_id=state.conversation_id,
+            request_id=str(uuid4()),
+            remaining_touches=state.remaining_touches,
+            remaining_conversation_turns=state.remaining_turns,
+        )
+        result = await self.communication.execute(action, context)
+        self._append_log(state, action, context, result)
+        if not result.success:
+            state.mark(Phase.NEEDS_REVIEW, error=f"Conversation cleanup failed: {result.error}")
+            return
+        state.conversation_active = False
+        state.conversation_id = None
+        state.turns_used = 0
+        report = self.evaluator.evaluate(
+            state.session_id,
+            session_state={
+                "session_id": state.session_id,
+                "status": state.session_status,
+                "touch_budget": state.touch_budget,
+                "touches_used": state.touches_used,
+            },
+        )
+        self.evaluator.save(report)
+        state.last_evaluation = report.orchestrator_feedback.model_dump(mode="json")
+
     async def run(self, state: RunState) -> RunState:
         """Execute finite canned QA actions and evaluate each step."""
         if state.phase is not Phase.CREATED or state.steps_completed:
@@ -163,10 +261,23 @@ class Orchestrator:
             state.mark(Phase.PLANNING)
             self._checkpoint(state)
             try:
-                action = await self.planner.propose(state)
-                if action is None:
-                    state.mark(Phase.COMPLETED)
-                    break
+                if callable(getattr(self.planner, "plan", None)):
+                    planner_input = self._build_planner_input(state)
+                    planner_result = await self.planner.plan(planner_input)
+                    if planner_result.decision == "stop":
+                        state.mark(Phase.COMPLETED)
+                        break
+                    if planner_result.decision == "insufficient_information":
+                        state.mark(Phase.NEEDS_REVIEW, error=planner_result.reasoning_summary)
+                        break
+                    action = planner_result.planned_action
+                    if action is None:
+                        raise ValueError("execute decision did not include planned_action")
+                else:
+                    action = await self.planner.propose(state)
+                    if action is None:
+                        state.mark(Phase.COMPLETED)
+                        break
                 # Reject sending when there are no contacts left, but allow an
                 # active conversation to be ended after the touch budget expires.
                 if action.action_type in {"send_message", "start_conversation"} and state.remaining_touches == 0:
@@ -228,6 +339,12 @@ class Orchestrator:
                 self._checkpoint(state)
         else:
             state.mark(Phase.STOPPED, error="Maximum number of QA steps reached")
+        # Terminate any mock chat left open at the step limit (or stop).
+        # This cleanup does not spend an additional simulator touch.
+        try:
+            await self._cleanup_conversation(state)
+        except Exception as exc:
+            state.mark(Phase.NEEDS_REVIEW, error=f"Cleanup error: {exc}")
         self._checkpoint(state)
         return state
 

@@ -9,6 +9,12 @@
   "conversation_id": null,
   "conversation_active": false,
   "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [],
+  "research_report_path": null,
+  "last_planner_decision": null,
+  "pending_request_id": null,
+  "pending_action": null,
   "last_evaluation": {
     "control": "decision_required",
     "reason": "Technical evaluation complete; orchestrator owns any next decision",
@@ -16,5 +22,5 @@
     "conversation_active": null
   },
   "last_error": "Maximum number of QA steps reached",
-  "updated_at": "2026-11-22T03:38:11.532640+00:00"
+  "updated_at": "2026-11-22T10:42:58.148552+00:00"
 }
