@@ -114,3 +114,31 @@ async def test_max_actions_stops_without_model():
     data["operational_constraints"]["actions_used"] = 10
     result = await PlanningAgent(client=None).plan(data)
     assert result.decision == "stop"
+
+
+@pytest.mark.asyncio
+async def test_fresh_session_refusal_bootstraps_transparent_qa():
+    data = example()
+    data["research_report"]["research_metadata"]["status"] = "not_run"
+    fake = FakeResponses("insufficient_information")
+    result = await PlanningAgent(client=SimpleNamespace(responses=fake)).plan(data)
+    assert fake.calls == 1
+    assert result.decision == "execute"
+    assert result.planned_action.action_type == "start_conversation"
+    assert result.planned_action.channel == "live_chat"
+
+
+@pytest.mark.asyncio
+async def test_refusal_with_missing_test_channel_still_refuses():
+    data = example()
+    data["simulator_environment"]["allowed_channels"] = []
+    result = await PlanningAgent(client=None).plan(data)
+    assert result.decision == "stop"
+
+
+@pytest.mark.asyncio
+async def test_existing_history_does_not_trigger_bootstrap():
+    data = example()
+    data["interaction_history"]["previous_actions"] = [{"action_type": "send_message"}]
+    result = await PlanningAgent(client=SimpleNamespace(responses=FakeResponses("insufficient_information"))).plan(data)
+    assert result.decision == "insufficient_information"

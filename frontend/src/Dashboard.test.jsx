@@ -52,6 +52,31 @@ it('follows an in-progress run with read-only requests', async () => {
   expect(fetch.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true)
 })
 
+it('filters saved runs by target and follows the latest run for that target', async () => {
+  const otherRun = { ...liveRun, id: 'other-run', target: 'second-persona' }
+  const runs = [liveRun, otherRun]
+  const fetch = serve((path) => {
+    if (path === '/api/qa/runs') return runs
+    const run = runs.find((item) => path.endsWith('/' + item.id))
+    return { ...run, stop_reason: `${run.target} run ended`, timeline: [] }
+  })
+  render(<App />)
+
+  expect(await screen.findByText('practice-persona run ended')).toBeTruthy()
+  const history = screen.getByRole('combobox', { name: 'Run history' })
+  fireEvent.change(history, { target: { value: liveRun.id } })
+  const target = screen.getByRole('combobox', { name: 'Target' })
+  fireEvent.change(target, { target: { value: otherRun.target } })
+
+  expect(await screen.findByText('second-persona run ended')).toBeTruthy()
+  expect(within(history).queryByRole('option', { name: /practice-persona/ })).toBeNull()
+  expect(history.value).toBe('')
+  expect(fetch.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true)
+
+  fireEvent.change(target, { target: { value: '' } })
+  expect(await screen.findByText('practice-persona run ended')).toBeTruthy()
+})
+
 it('loads transcripts and events only after expanding session activity', async () => {
   const responses = {
     '/api/qa/runs': [liveRun],

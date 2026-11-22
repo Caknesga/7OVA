@@ -11,6 +11,7 @@ const formatCost = new Intl.NumberFormat(undefined, {
 
 export function AgentRuns() {
   const [catalog, setCatalog] = useState({ runs: [], loaded: false, error: '' })
+  const [target, setTarget] = useState('')
   const [pinnedId, setPinnedId] = useState('')
   const [snapshot, setSnapshot] = useState(null)
   const [detailError, setDetailError] = useState(null)
@@ -42,8 +43,11 @@ export function AgentRuns() {
   }, [revision])
 
   const { runs } = catalog
-  const pinned = runs.find((item) => item.id === pinnedId)
-  const summary = pinned || runs[0]
+  const targets = [...new Set([target, ...runs.map((item) => item.target)]
+    .filter((value) => typeof value === 'string' && value))].sort((first, second) => first.localeCompare(second))
+  const visibleRuns = target ? runs.filter((item) => item.target === target) : runs
+  const pinned = visibleRuns.find((item) => item.id === pinnedId)
+  const summary = pinned || visibleRuns[0]
   const id = summary?.id
   const knownRunning = summary?.status === 'running'
 
@@ -88,7 +92,9 @@ export function AgentRuns() {
   }[connection]
   let emptyMessage = pullError || catalog.error
   if (!emptyMessage && !run) {
-    emptyMessage = id ? 'Loading run timeline…' : catalog.loaded ? 'No live runs recorded.' : 'Loading runs…'
+    if (id) emptyMessage = 'Loading run timeline…'
+    else if (!catalog.loaded) emptyMessage = 'Loading runs…'
+    else emptyMessage = target ? 'No runs recorded for this target.' : 'No live runs recorded.'
   }
 
   return <>
@@ -96,12 +102,20 @@ export function AgentRuns() {
       <div className="workflow-toolbar">
         <p role="status" className="connection" data-connection={connection}>{connectionLabel}</p>
         <div className="workflow-controls">
-          <label>Run history<select value={pinned?.id || ''} disabled={!runs.length} onChange={(event) => {
+          <label className="target-filter">Target<select value={target} disabled={!targets.length} onChange={(event) => {
+            setTarget(event.target.value)
+            setDetailError(null)
+            setPinnedId('')
+          }}>
+            <option value="">All targets</option>
+            {targets.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select></label>
+          <label>Run history<select value={pinned?.id || ''} disabled={!visibleRuns.length} onChange={(event) => {
             setDetailError(null)
             setPinnedId(event.target.value)
           }}>
-            <option value="">{runs.length ? 'Follow latest run' : 'No runs available'}</option>
-            {runs.map((item) => <option key={item.id} value={item.id}>
+            <option value="">{visibleRuns.length ? 'Follow latest run' : 'No runs available'}</option>
+            {visibleRuns.map((item) => <option key={item.id} value={item.id}>
               {[item.target, label(item.id === run?.id ? run.status : item.status), item.id].filter(Boolean).join(' · ')}
             </option>)}
           </select></label>

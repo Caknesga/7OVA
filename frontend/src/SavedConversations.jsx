@@ -23,6 +23,7 @@ export function SavedConversations({ conversations, targets }) {
       <div><dt>Turns</dt><dd>{selected.turns_used} / {selected.max_turns}</dd></div>
     </dl>
     <div className="feed live-feed" role="log" aria-label="Live conversation transcript">
+      {!selected.greeting && !selected.turns?.length && <p className="muted">Transcript text unavailable in this view.</p>}
       {selected.greeting && <article className="bubble reply">
         <div className="metadata">Simulator · Greeting</div><p>{selected.greeting}</p>
       </article>}

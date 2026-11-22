@@ -5,8 +5,8 @@ export function App() {
   return <div className="shell">
     <header className="topbar">
       <div className="brand">
-        <span className="mark" aria-hidden="true">r8</span>
-        <span>revel8 <span className="brand-divider">/</span> START Hack 2026</span>
+        <span className="mark" aria-hidden="true">7</span>
+        <span>7_Social_Hack</span>
       </div>
     </header>
     <main className="page">

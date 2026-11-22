@@ -23,7 +23,7 @@ except ModuleNotFoundError as exc:
     if exc.name != "communicate":
         raise
     # Local standalone bundle uses communication/; the user repository uses communicate/.
-    from communication.schemas import CommunicationResult, ExecutionContext, PlannedAction
+    from communicate.schemas import CommunicationResult, ExecutionContext, PlannedAction
 from evaluation.agent import EvaluationAgent
 from planning.agent import PlannerInput
 from .state import Phase, RunState

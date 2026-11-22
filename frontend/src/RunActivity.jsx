@@ -1,4 +1,4 @@
-import React, { useId, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import { label } from './activity.jsx'
 
 const stages = [
@@ -8,6 +8,7 @@ const stages = [
   { id: 'evaluate', name: 'Evaluation', states: ['EVALUATE', 'MEMORY', 'CONTINUE'] },
   { id: 'finish', name: 'Finish', states: ['STOP'] },
 ]
+const replayInterval = 850
 
 const sentences = {
   start_conversation: 'Start conversation',
@@ -45,10 +46,10 @@ function RecordValue({ value }) {
   return <span>{value == null ? '—' : typeof value === 'boolean' ? (value ? 'Yes' : 'No') : String(value)}</span>
 }
 
-function stageSummary(stage, entries, run, active) {
+function stageSummary(stage, entries, run, active, replaying) {
   if (!run) return 'Awaiting run'
-  if (stage.id === 'finish' && run.status !== 'running') return title(run.status)
-  if (!entries.length) return active ? 'In progress' : run.status === 'running' ? 'Pending' : 'No recorded step'
+  if (stage.id === 'finish' && run.status !== 'running' && (!replaying || entries.length)) return title(run.status)
+  if (!entries.length) return active ? 'In progress' : (run.status === 'running' || replaying) ? 'Pending' : 'No recorded step'
   switch (stage.id) {
     case 'setup':
       return run.profile?.name || (entries.some(({ state }) => state === 'RESEARCH') ? 'Research recorded' : 'Run started')
@@ -64,6 +65,8 @@ function stageSummary(stage, entries, run, active) {
     case 'evaluate': {
       const observations = entries.filter(({ state, detail }) => state === 'EVALUATE' && detail?.observation)
       const replies = observations.filter(({ detail }) => detail.observation === 'reply').length
+      const report = entries.findLast(({ detail }) => detail?.evaluation_status)?.detail.evaluation_status
+      if (!observations.length && report) return `Report ${label(report)}`
       return replies ? countLabel(replies, 'reply', 'replies')
         : observations.at(-1) ? describe(observations.at(-1).detail.observation) : 'Reviewing result'
     }
@@ -79,7 +82,7 @@ function StepRecord({ entry, classification }) {
     case 'START':
       return <li><strong>Run started</strong></li>
     case 'RESEARCH':
-      return <li><strong>{detail.profile?.name || 'Load simulator profile'}</strong>
+      return <li><strong>{detail.profile?.name || (detail.research_reference ? 'Research reference recorded' : 'Load simulator profile')}</strong>
         {detail.source && <span>{title(detail.source)}</span>}
         {detail.profile?.role && <span>{detail.profile.role}</span>}
         {Number.isFinite(detail.remaining_touches) && <span>{countLabel(detail.remaining_touches, 'touch', 'touches')} available</span>}
@@ -98,11 +101,14 @@ function StepRecord({ entry, classification }) {
         <strong>{detail.retry ? `Retry: ${describe(detail.action)}` : detail.action ? describe(detail.action) : 'Simulator request'}</strong>
         {detail.channel && <span>{title(detail.channel)}</span>}
         {detail.retry && detail.http_status && <span>HTTP {detail.http_status}</span>}
+        {typeof detail.success === 'boolean' && <span>{detail.success ? 'Request succeeded' : 'Request failed'}</span>}
         {detail.text && <blockquote>{detail.text}</blockquote>}
       </li>
     case 'EVALUATE':
       return <li><strong>{detail.observation ? describe(detail.observation) : 'Result recorded'}</strong>
         {detail.action && <span>{describe(detail.action)}</span>}
+        {detail.evaluation_status && <span>Report {label(detail.evaluation_status)}</span>}
+        {Number.isInteger(detail.actions_logged) && <span>{countLabel(detail.actions_logged, 'action')} evaluated</span>}
         {Number.isInteger(detail.remaining_touches) && <span>{countLabel(detail.remaining_touches, 'run touch', 'run touches')} left</span>}
         {detail.event_types?.length > 0 && <span>Events: {detail.event_types.map(label).join(', ')}</span>}
         {detail.replies?.map((reply, index) => <blockquote key={index}>{reply}</blockquote>)}
@@ -128,10 +134,29 @@ function isClassificationFor(result, memory) {
 export function RunActivity({ run, formatCost, emptyMessage, emptyError }) {
   const [expanded, setExpanded] = useState()
   const [rawOpen, setRawOpen] = useState(false)
+  const [playback, setPlayback] = useState(null)
   const detailsId = useId()
-  const timeline = run?.timeline || []
+  const recording = run?.timeline || []
+  const canReplay = run?.status !== 'running' && recording.length > 0
+  const replay = canReplay ? playback : null
+  const atEnd = replay && replay.step === replay.entries.length - 1
+  const playing = replay?.playing && !atEnd
+  const timeline = replay ? replay.entries.slice(0, replay.step + 1) : recording
+
+  useEffect(() => {
+    if (!playing) return
+    const timer = setTimeout(() => setPlayback((previous) => previous && { ...previous, step: previous.step + 1 }), replayInterval)
+    return () => clearTimeout(timer)
+  }, [playing, replay?.step])
+
+  function startReplay() {
+    setPlayback({ entries: recording, step: 0, playing: true })
+    setExpanded(undefined)
+  }
+
   const entries = (stage) => timeline.filter(({ state }) => stage.states.includes(state))
-  const current = run?.status === 'running' ? (run.state || timeline.at(-1)?.state) : undefined
+  const current = replay ? replay.entries[replay.step].state
+    : run?.status === 'running' ? (run.state || timeline.at(-1)?.state) : undefined
   const latest = timeline.findLast(({ state }) => state !== 'STOP')?.state || timeline.at(-1)?.state
   const defaultStage = stages.find((stage) => stage.states.includes(current) && entries(stage).length)
     || stages.find((stage) => stage.states.includes(latest))
@@ -154,6 +179,20 @@ export function RunActivity({ run, formatCost, emptyMessage, emptyError }) {
     <section className="qa-section qa-flow-section" aria-label="Agent data flow">
       <div className="qa-flow-heading">
         <h2>Workflow stages</h2>
+        {canReplay && <div className="replay-controls" role="group" aria-label="Timeline replay">
+          {replay ? <>
+            <span className="muted">Replay · Step {replay.step + 1} of {replay.entries.length}</span>
+            {atEnd ? <button type="button" className="button replay-button" onClick={startReplay}>Replay again</button>
+              : <button type="button" className="button" onClick={() => {
+                setPlayback((previous) => ({ ...previous, playing: !previous.playing }))
+                if (!playing) setExpanded(undefined)
+              }}>{playing ? 'Pause' : 'Resume'}</button>}
+            <button type="button" className="button" onClick={() => {
+              setPlayback(null)
+              setExpanded(undefined)
+            }}>Exit replay</button>
+          </> : <button type="button" className="button replay-button" onClick={startReplay}>Replay timeline</button>}
+        </div>}
       </div>
       <div className="qa-flow">
         <ol className="qa-flow-stages">
@@ -168,7 +207,7 @@ export function RunActivity({ run, formatCost, emptyMessage, emptyError }) {
                 aria-labelledby={nameId} aria-describedby={nameId + '-summary'}
                 onClick={() => setExpanded(selectedId === stage.id ? null : stage.id)}>
                 <strong id={nameId}>{stage.name}</strong>
-                <span id={nameId + '-summary'}>{stageSummary(stage, recorded, run, active)}</span>
+                <span id={nameId + '-summary'}>{stageSummary(stage, recorded, run, active, Boolean(replay))}</span>
               </button>
             </li>
           })}

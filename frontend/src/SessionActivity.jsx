@@ -9,7 +9,7 @@ function ReplyCard({ event }) {
   return <article className="bubble reply">
     <div className="metadata">Simulator reply · {label(event.channel)}</div>
     {event.subject && <strong>{event.subject}</strong>}
-    <p>{event.body}</p>
+    <p>{event.body || 'Reply text unavailable in this view.'}</p>
   </article>
 }
 
@@ -23,7 +23,7 @@ function Transcript({ history, targets }) {
       <article className="bubble sent">
         <div className="metadata">Sent to {targets.find((item) => item.id === message.to)?.name || message.to} · {label(message.channel)}</div>
         {message.subject && <strong>{message.subject}</strong>}
-        <p>{message.body}</p>
+        <p>{message.body || 'Message text unavailable in this view.'}</p>
       </article>
       {replies.filter((event) => event.in_reply_to === message.message_id).map((event) => <ReplyCard event={event} key={event.id} />)}
     </React.Fragment>)}

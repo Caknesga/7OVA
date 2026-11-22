@@ -21,7 +21,6 @@ button:disabled { cursor: default; }
 .topbar { border-bottom: 1px solid #263547; padding: .85rem clamp(1rem, 5vw, 3rem); background: #0e1721; }
 .brand { display: flex; align-items: center; gap: .7rem; max-width: 1160px; margin-inline: auto; font-size: .875rem; font-weight: 650; }
 .mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #0c342a; font-weight: 850; }
-.brand-divider { color: #778ba1; margin-inline: .2rem; }
 .page { max-width: 1240px; margin-inline: auto; padding: clamp(2rem, 5vw, 3.4rem) clamp(1rem, 5vw, 2.5rem) 4rem; }
 h1 { margin-bottom: 1.35rem; font-size: clamp(2.4rem, 5vw, 3.6rem); line-height: 1.05; letter-spacing: -.06em; font-weight: 720; }
 .panel { min-width: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; }
@@ -56,7 +55,12 @@ h1 { margin-bottom: 1.35rem; font-size: clamp(2.4rem, 5vw, 3.6rem); line-height:
 .qa-run-summary [data-status="stopped"] { color: #f2d6a6; }
 
 .qa-section { padding: 1.2rem clamp(1rem, 3vw, 1.5rem); }
-.qa-flow-heading h2 { margin-bottom: .9rem; font-size: 1.12rem; font-weight: 700; }
+.qa-flow-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .65rem; margin-bottom: .9rem; }
+.qa-flow-heading h2 { font-size: 1.12rem; font-weight: 700; }
+.replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.replay-controls span { font-variant-numeric: tabular-nums; }
+.button.replay-button { color: var(--accent); border-color: #4b8474; background: #1b3a34; }
+.button.replay-button:hover { background: #264b40; }
 .qa-flow { container-type: inline-size; }
 .qa-flow-stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1rem; }
 .qa-flow-stages > li { position: relative; min-width: 0; }
@@ -126,7 +130,7 @@ h1 { margin-bottom: 1.35rem; font-size: clamp(2.4rem, 5vw, 3.6rem); line-height:
 }
 @media (max-width: 540px) {
   .workflow-toolbar { align-items: stretch; }
-  .workflow-controls { width: 100%; }
-  .workflow-controls label { flex: 1; }
+  .workflow-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+  .workflow-controls .target-filter { grid-column: 1 / -1; }
   .activity-toolbar label { width: 100%; }
 }

@@ -290,6 +290,42 @@ class PlanningAgent:
         if not 0.0 <= choice.confidence <= 1.0:
             raise ValueError("Model confidence must be in [0, 1]")
 
+        # A fresh session legitimately has no events yet. For a *communication-
+        # interface QA* objective, an LLM refusal based only on absent history is
+        # not evidence that the objective cannot start. Use a fixed, transparent
+        # bootstrap test instead of allowing an arbitrary model-generated send.
+        if (
+            choice.action == "insufficient_information"
+            and not env.conversation_active
+            and constraints.actions_used == 0
+            and not history.previous_actions
+            and not history.simulator_replies
+            and not history.observable_events
+        ):
+            qa_text = " ".join(
+                [objective.description, *objective.completion_criteria]
+            ).lower()
+            tests_communication = any(
+                phrase in qa_text
+                for phrase in ("message", "delivery", "reply", "response", "live chat", "conversation")
+            )
+            if tests_communication:
+                initial = next(
+                    (name for name in ("start_live_chat", "email_receipt") if name in available),
+                    None,
+                )
+                if initial is not None:
+                    return PlannerResult(
+                        decision="execute",
+                        planned_action=self._compile_action(initial, data),
+                        reasoning_summary=(
+                            "Start the permitted communication-interface QA test; "
+                            "an empty history is expected in a new session."
+                        ),
+                        confidence=1.0,
+                        expected_observable_events=[],
+                    )
+
         if choice.action in {"stop", "insufficient_information"}:
             return PlannerResult(
                 decision=choice.action,

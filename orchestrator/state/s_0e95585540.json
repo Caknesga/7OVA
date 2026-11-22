@@ -1,0 +1,47 @@
+{
+  "session_id": "s_0e95585540",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "stopped",
+  "touch_budget": 30,
+  "touches_used": 1,
+  "steps_completed": 3,
+  "conversation_id": null,
+  "conversation_active": false,
+  "turns_used": 0,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": {
+    "decision": "execute",
+    "planned_action": {
+      "action_type": "send_turn",
+      "target_id": null,
+      "channel": null,
+      "sender": null,
+      "subject": null,
+      "body": null,
+      "say": "Hello, this is a simulated communication test. Is this message visible?",
+      "attachments": []
+    },
+    "reasoning_summary": "The conversation is active and requires a response to the last message from the persona. A message action needs to be sent to log the communication and address the questions posed. This aligns with the objective to test message delivery and response parsing.",
+    "confidence": 0.9,
+    "expected_observable_events": [
+      "message_sent",
+      "response_received"
+    ]
+  },
+  "pending_request_id": null,
+  "pending_action": null,
+  "last_evaluation": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": false
+  },
+  "last_error": "Configured QA step limit reached",
+  "updated_at": "2026-11-22T10:57:28.846673+00:00"
+}

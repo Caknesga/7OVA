@@ -1,0 +1,35 @@
+{
+  "session_id": "s_0407d984b2",
+  "scenario_id": "practice",
+  "target_id": "robert",
+  "phase": "needs_review",
+  "touch_budget": 30,
+  "touches_used": 1,
+  "steps_completed": 4,
+  "conversation_id": "c_9d47414a5f",
+  "conversation_active": false,
+  "turns_used": 3,
+  "session_status": "active",
+  "allowed_channels": [
+    "email",
+    "live_chat"
+  ],
+  "research_report_path": null,
+  "last_planner_decision": {
+    "decision": "insufficient_information",
+    "planned_action": null,
+    "reasoning_summary": "The simulation requires clarity on who initiated the test and its scope for valid responses. There is a lack of concrete information in the current state to proceed effectively with message delivery and response event logging.",
+    "confidence": 0.8,
+    "expected_observable_events": []
+  },
+  "pending_request_id": null,
+  "pending_action": null,
+  "last_evaluation": {
+    "control": "decision_required",
+    "reason": "Technical evaluation complete; orchestrator owns any next decision",
+    "session_status": "active",
+    "conversation_active": false
+  },
+  "last_error": "The simulation requires clarity on who initiated the test and its scope for valid responses. There is a lack of concrete information in the current state to proceed effectively with message delivery and response event logging.",
+  "updated_at": "2026-11-22T11:29:24.308624+00:00"
+}
