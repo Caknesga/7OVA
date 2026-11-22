@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "session_id": "s_test",
+  "evaluated_at": "2026-11-22T03:31:15.313351+00:00",
+  "evaluation_status": "no_data",
+  "metrics": {
+    "actions_logged": 0,
+    "successful_actions": 0,
+    "failed_actions": 0,
+    "messages_sent": 0,
+    "conversations_started": 0,
+    "conversation_turns_sent": 0,
+    "conversations_ended": 0,
+    "actions_with_observable_response": 0,
+    "persona_utterances": 0,
+    "events": {
+      "reply": 0,
+      "link_opened": 0,
+      "page_submitted": 0,
+      "attachment_opened": 0,
+      "other": 0
+    },
+    "touch_budget": null,
+    "touches_used": null,
+    "remaining_touches": null,
+    "transport_success_rate": null
+  },
+  "timeline": [],
+  "orchestrator_feedback": {
+    "control": "review",
+    "reason": "No outgoing interaction log was available for evaluation",
+    "session_status": null,
+    "conversation_active": null
+  },
+  "warnings": [
+    "No local action logs found; simulator events alone cannot reconstruct outgoing content"
+  ],
+  "limitations": [
+    "No hidden target intent, suspicion or susceptibility is available from the API.",
+    "Response and click observations do not establish factual accuracy or consent.",
+    "Official jury scores for targeting, appearance, architecture and pitch cannot be inferred.",
+    "No generated communication strategy or sensitive response content is included.",
+    "No fresh GET /sessions/{id}/events evidence was supplied.",
+    "No current GET /sessions/{id} state was supplied; budget/status may be unknown."
+  ],
+  "source_files": []
+}

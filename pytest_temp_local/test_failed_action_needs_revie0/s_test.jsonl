@@ -1,0 +1,1 @@
+{"session_id": "s_test", "planned_action": {"action_type": "send_message", "body": "Test.", "target_id": "robert", "channel": "email"}, "execution_context": {"session_id": "s_test", "request_id": "a1"}, "communication_result": {"action_type": "send_message", "success": false, "error": "HTTP 401", "events": []}}

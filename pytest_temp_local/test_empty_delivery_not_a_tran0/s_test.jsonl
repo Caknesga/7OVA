@@ -1,0 +1,1 @@
+{"session_id": "s_test", "planned_action": {"action_type": "send_message", "target_id": "robert", "channel": "email", "body": "Confirm receipt."}, "execution_context": {"session_id": "s_test", "request_id": "a1"}, "communication_result": {"action_type": "send_message", "success": true, "message_id": "m_1", "touches_used": 1, "events": []}}
